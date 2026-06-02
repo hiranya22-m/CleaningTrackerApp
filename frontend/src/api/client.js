@@ -3,81 +3,144 @@ import { Platform, NativeModules } from 'react-native';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const getBackendUrl = () => {
-  if (Platform.OS === 'web') {
-    return 'http://localhost:5000';
+const PRODUCTION_URL = 'https://cleaningtrackerapp-production.up.railway.app';
+
+export const isStandaloneApp = () =>
+  Constants.executionEnvironment === 'standalone' ||
+  Constants.executionEnvironment === 'bare';
+
+const isLocalOrPrivateUrl = (url) => {
+  if (!url) return true;
+  const lower = url.toLowerCase();
+  return (
+    lower.includes('localhost') ||
+    lower.includes('127.0.0.1') ||
+    lower.includes('10.0.2.2') ||
+    /https?:\/\/192\.168\./.test(lower) ||
+    /https?:\/\/10\.\d+\.\d+\.\d+/.test(lower) ||
+    lower.startsWith('http://')
+  );
+};
+
+export const getConfiguredProductionUrl = () => {
+  const fromExtra = Constants.expoConfig?.extra?.apiUrl;
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL;
+  return (fromExtra || fromEnv || PRODUCTION_URL).replace(/\/$/, '');
+};
+
+const resolveDevHost = () => {
+  const hostUri =
+    Constants?.expoConfig?.hostUri ||
+    Constants?.manifest2?.extra?.expoGoLaunchMetadata?.debuggerHost ||
+    Constants?.manifest?.debuggerHost;
+
+  if (hostUri) {
+    return hostUri.split(':')[0];
   }
 
-  // If in development mode, automatically connect to the local development machine
+  const scriptURL = NativeModules.SourceCode?.scriptURL;
+  if (scriptURL) {
+    const match = scriptURL.match(/^[a-z]+:\/\/([^:/]+)(:\d+)?/i);
+    if (match) return match[1];
+  }
+
+  return '';
+};
+
+const getBackendUrl = () => {
+  const productionUrl = getConfiguredProductionUrl();
+
+  // Standalone APK/IPA (EAS build) — always use the public cloud server
+  if (isStandaloneApp()) {
+    return productionUrl;
+  }
+
+  if (Platform.OS === 'web') {
+    return __DEV__ ? 'http://localhost:5000' : productionUrl;
+  }
+
+  // Expo Go / dev client on a physical device or emulator
   if (__DEV__) {
-    // 1. Try to extract host from expo-constants (highly reliable in Expo Go)
-    const hostUri = Constants?.expoConfig?.hostUri || 
-                    Constants?.manifest2?.extra?.expoGoLaunchMetadata?.debuggerHost || 
-                    Constants?.manifest?.debuggerHost;
-    
-    let host = '';
-    if (hostUri) {
-      host = hostUri.split(':')[0];
-    } else {
-      // 2. Fallback to parsing NativeModules.SourceCode.scriptURL
-      const scriptURL = NativeModules.SourceCode?.scriptURL;
-      if (scriptURL) {
-        const match = scriptURL.match(/^[a-z]+:\/\/([^:/]+)(:\d+)?/i);
-        if (match) {
-          host = match[1];
-        }
-      }
-    }
-
-    if (host) {
-      // Route to local IP address so that physical devices can still work!
-      if (host.includes('ngrok') || host.includes('expo.dev')) {
-        console.log(`[SparkleFlow API] Tunnel connection detected (${host}). Routing to local IP backend.`);
-        return 'http://10.130.45.181:5000';
-      }
-
-      console.log(`[SparkleFlow API] Dev server host resolved: ${host} -> pointing to local IP: http://${host}:5000`);
+    const host = resolveDevHost();
+    if (host && !host.includes('ngrok') && !host.includes('expo.dev')) {
+      console.log(`[CleanTrack API] Dev host: ${host} -> http://${host}:5000`);
       return `http://${host}:5000`;
     }
-    
-    // Default fallback for Android Emulator if host is not resolved
+
     const fallback = Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000';
-    console.log(`[SparkleFlow API] Development mode fallback: using ${fallback}`);
+    console.log(`[CleanTrack API] Dev fallback: ${fallback}`);
     return fallback;
   }
 
-  // Point to the live production server hosted on Railway!
-  return 'https://cleaningtrackerapp-production.up.railway.app';
+  return productionUrl;
 };
 
+export const getBaseUrl = () => CURRENT_BASE_URL;
+
+/** @deprecated Use getBaseUrl() — kept for older imports */
 export const BASE_URL = getBackendUrl();
+
 export let CURRENT_BASE_URL = BASE_URL;
 
 export const setDynamicBaseUrl = (url) => {
   if (!url) return;
-  CURRENT_BASE_URL = url;
-  apiClient.defaults.baseURL = `${url}/api`;
+  const clean = url.trim().replace(/\/$/, '');
+  CURRENT_BASE_URL = clean;
+  apiClient.defaults.baseURL = `${clean}/api`;
 };
 
-// Load saved backend URL override on startup
+export const checkServerHealth = async (baseUrl = CURRENT_BASE_URL) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(`${baseUrl}/`, { signal: controller.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+// Load saved backend URL override on startup (dev / Expo Go only)
 export const initializeBaseUrl = async () => {
+  const defaultUrl = getBackendUrl();
+  CURRENT_BASE_URL = defaultUrl;
+  apiClient.defaults.baseURL = `${defaultUrl}/api`;
+
+  // Never let a stale local URL break a production APK
+  if (isStandaloneApp()) {
+    try {
+      const savedUrl = await AsyncStorage.getItem('custom_backend_url');
+      if (savedUrl && isLocalOrPrivateUrl(savedUrl)) {
+        await AsyncStorage.removeItem('custom_backend_url');
+        console.log('[API Client] Removed stale local backend URL from storage');
+      }
+    } catch (e) {
+      console.error('Failed to clear stale backend URL:', e);
+    }
+    console.log(`[API Client] Standalone app -> ${CURRENT_BASE_URL}`);
+    return CURRENT_BASE_URL;
+  }
+
   try {
     const savedUrl = await AsyncStorage.getItem('custom_backend_url');
-    if (savedUrl) {
+    if (savedUrl && !isLocalOrPrivateUrl(savedUrl)) {
       setDynamicBaseUrl(savedUrl);
-      console.log(`[API Client] Initialized with custom saved URL: ${savedUrl}`);
+      console.log(`[API Client] Custom URL: ${savedUrl}`);
       return savedUrl;
     }
   } catch (e) {
     console.error('Failed to load custom backend URL:', e);
   }
-  console.log(`[API Client] Initialized with default URL: ${CURRENT_BASE_URL}`);
+
+  console.log(`[API Client] Default URL: ${CURRENT_BASE_URL}`);
   return CURRENT_BASE_URL;
 };
 
 const apiClient = axios.create({
   baseURL: `${BASE_URL}/api`,
-  timeout: 10000,
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json'
   }
@@ -93,7 +156,7 @@ export const loadPersistentSession = () => {
     if (Platform.OS === 'web') {
       const savedToken = localStorage.getItem('sparkleflow_token');
       const savedUser = localStorage.getItem('sparkleflow_user');
-      
+
       if (savedToken && savedUser) {
         userToken = savedToken;
         currentUser = JSON.parse(savedUser);
@@ -150,11 +213,9 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response && error.response.status === 401) {
-      // Stale session detected — clear active session state immediately
       setAuthToken('');
       setCurrentUserStore(null);
-      
-      // Auto-reload on Web to reset React Navigation stack container straight to the Sign In state!
+
       if (Platform.OS === 'web') {
         window.location.reload();
       }
@@ -165,7 +226,6 @@ apiClient.interceptors.response.use(
 
 // API functions
 export const authAPI = {
-  // Admin password login
   login: async (email, password) => {
     const res = await apiClient.post('/auth/login', { email, password });
     if (res.data.success) {
@@ -175,8 +235,6 @@ export const authAPI = {
     return res.data;
   },
 
-  // ── Unified OTP methods (Worker & Contractor) ──────────────────────────────
-  // Request OTP — for both login (existing user) and registration (new user)
   requestOtp: async (email, role, name = '', phoneNumber = '', companyName = '') => {
     const res = await apiClient.post('/auth/otp/request', {
       email,
@@ -188,7 +246,6 @@ export const authAPI = {
     return res.data;
   },
 
-  // Verify OTP — authenticates and returns JWT; creates account for new users
   verifyOtp: async (email, code, role, name = '', phoneNumber = '', companyName = '') => {
     const res = await apiClient.post('/auth/otp/verify', {
       email,
@@ -205,7 +262,6 @@ export const authAPI = {
     return res.data;
   },
 
-  // ── Legacy aliases (used by ContractorOtpScreen — kept for compatibility) ──
   contractorRequestOtp: async (email, name = '', phoneNumber = '', companyName = '') => {
     const res = await apiClient.post('/auth/otp/request', {
       email,

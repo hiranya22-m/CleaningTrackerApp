@@ -2,7 +2,7 @@
   "expo": {
     "name": "Cleaning Tracker",
     "slug": "cleaning-tracker",
-    "version": "1.0.0",
+    "version": "1.0.2",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "ios": {
@@ -21,6 +21,7 @@
       "backgroundColor": "#0F172A"
     },
     "extra": {
+      "apiUrl": "https://cleaningtrackerapp-production.up.railway.app",
       "eas": {
         "projectId": "4d6e3d9b-3c3d-41d0-8cba-9d68763acba4"
       }

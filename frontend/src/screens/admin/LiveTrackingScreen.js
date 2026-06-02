@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
 import { Colors } from '../../theme/colors';
 import MapViewContainer from '../../components/MapViewContainer';
-import { locationAPI, BASE_URL } from '../../api/client';
+import { locationAPI, getBaseUrl } from '../../api/client';
 import io from 'socket.io-client';
 
 const LiveTrackingScreen = () => {
@@ -36,7 +36,7 @@ const LiveTrackingScreen = () => {
     fetchActiveLocations();
 
     // Setup Socket.io real-time connection
-    socketRef.current = io(BASE_URL);
+    socketRef.current = io(getBaseUrl());
 
     // Identify as admin monitor
     socketRef.current.emit('join', { role: 'admin', userId: 'global_admin' });

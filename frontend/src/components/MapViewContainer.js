@@ -1,21 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated, Easing, Platform } from 'react-native';
+import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
 import { Colors } from '../theme/colors';
-
-// Conditional native modules loader for absolute cross-platform compile safety
-let MapView, Marker, Circle, Polyline;
-if (Platform.OS !== 'web') {
-  try {
-    const mapsModuleName = 'react-native-maps';
-    const Maps = require(mapsModuleName);
-    MapView = Maps.default;
-    Marker = Maps.Marker;
-    Circle = Maps.Circle;
-    Polyline = Maps.Polyline;
-  } catch (e) {
-    console.warn("Native react-native-maps module failed to load. Falling back to radar mock.", e);
-  }
-}
 
 const MapViewContainer = ({
   clientCoords = [-73.9772, 40.7527], // [lng, lat]
@@ -49,83 +34,7 @@ const MapViewContainer = ({
 
   const isBreached = geofenceStatus === 'outside_breach';
 
-  // ----------------------------------------------------
-  // NATIVE MOBILE GOOGLE MAPS RENDERING
-  // ----------------------------------------------------
-  if (Platform.OS !== 'web' && MapView && Marker) {
-    // Determine bounds & coordinates
-    const clientLatLng = { latitude: clientLat, longitude: clientLng };
-    const workerLatLng = { latitude: workerLat, longitude: workerLng };
-    
-    // Polyline route coordinates (worker to customer, plus any breadcrumbs)
-    const polylineCoords = [workerLatLng, ...routeHistory.map(pt => ({ latitude: pt[1], longitude: pt[0] })), clientLatLng];
-
-    return (
-      <View style={[styles.nativeContainer, { height }]}>
-        <MapView
-          style={StyleSheet.absoluteFillObject}
-          provider="google" // Forces Google Maps on both iOS and Android!
-          initialRegion={{
-            latitude: (clientLat + workerLat) / 2,
-            longitude: (clientLng + workerLng) / 2,
-            latitudeDelta: Math.max(0.008, Math.abs(clientLat - workerLat) * 1.8),
-            longitudeDelta: Math.max(0.008, Math.abs(clientLng - workerLng) * 1.8)
-          }}
-        >
-          {/* Customer Location Marker */}
-          <Marker
-            coordinate={clientLatLng}
-            title={clientName}
-            description="Cleaning Destination"
-            pinColor={Colors.primary}
-          />
-
-          {/* Worker Location Marker */}
-          <Marker
-            coordinate={workerLatLng}
-            title={workerName}
-            description="Live Cleaner Position"
-            pinColor={isBreached ? Colors.danger : Colors.success}
-          />
-
-          {/* Customer Geofence Boundary Circle */}
-          {Circle && (
-            <Circle
-              center={clientLatLng}
-              radius={geofenceRadius}
-              strokeColor={isBreached ? Colors.danger : Colors.success}
-              fillColor={isBreached ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.08)'}
-              strokeWidth={1.5}
-            />
-          )}
-
-          {/* Dynamic route polyline connecting worker to client */}
-          {Polyline && (
-            <Polyline
-              coordinates={polylineCoords}
-              strokeColor={isBreached ? Colors.danger : Colors.primary}
-              strokeWidth={3}
-              lineDashPattern={[5, 5]} // Dotted route representation
-            />
-          )}
-        </MapView>
-
-        {/* Floating geofence warning card */}
-        <View style={[
-          styles.nativeAlertBanner,
-          { backgroundColor: isBreached ? Colors.danger : Colors.success }
-        ]}>
-          <Text style={styles.alertText}>
-            {isBreached ? '⚠️ GEOFENCE VIOLATION OUTSIDE AREA' : '🛡️ GEOFENCE STATUS SECURED'}
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  // ----------------------------------------------------
-  // HIGH-FIDELITY RADAR FALLBACK FOR WEB PREVIEWS
-  // ----------------------------------------------------
+  // Radar visualization — no native Google Maps / ARCore dependency
   const dLat = workerLat - clientLat;
   const dLng = workerLng - clientLng;
 

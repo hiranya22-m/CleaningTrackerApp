@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, RefreshControl, StyleSheet, Alert, TouchableOpacity, Image } from 'react-native';
 import { Colors } from '../../theme/colors';
-import { jobsAPI, attendanceAPI, workerAPI, BASE_URL } from '../../api/client';
+import { jobsAPI, attendanceAPI, workerAPI, getBaseUrl } from '../../api/client';
 import AppFooter from '../../components/AppFooter';
 import io from 'socket.io-client';
 
@@ -58,7 +58,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
     }, 1000);
 
     // Socket.io real-time connection for dispatch alerts
-    const socket = io(BASE_URL, {
+    const socket = io(getBaseUrl(), {
       auth: { role: 'worker', userId: user.id }
     });
 

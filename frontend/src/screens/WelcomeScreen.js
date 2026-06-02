@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, Tex
 import { Colors } from '../theme/colors';
 import AppFooter from '../components/AppFooter';
 import CustomButton from '../components/CustomButton';
-import { CURRENT_BASE_URL, setDynamicBaseUrl } from '../api/client';
+import { CURRENT_BASE_URL, setDynamicBaseUrl, getConfiguredProductionUrl, isStandaloneApp } from '../api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const WelcomeScreen = ({ navigation }) => {
@@ -29,11 +29,11 @@ const WelcomeScreen = ({ navigation }) => {
   const handleResetConfig = async () => {
     try {
       await AsyncStorage.removeItem('custom_backend_url');
-      const defaultUrl = 'https://cleaningtrackerapp-production.up.railway.app';
+      const defaultUrl = getConfiguredProductionUrl();
       setDynamicBaseUrl(defaultUrl);
       setInputUrl(defaultUrl);
       setShowConfig(false);
-      Alert.alert('Configuration Reset 🚀', 'Backend connection URL has been reset to the default live Railway server.');
+      Alert.alert('Configuration Reset', 'Backend URL reset to the live cloud server.');
     } catch (e) {
       Alert.alert('Reset Failed', e.message);
     }
@@ -118,8 +118,16 @@ const WelcomeScreen = ({ navigation }) => {
         <Text style={styles.actionFooter}>Enterprise-grade security and automated GPS geofencing built-in.</Text>
       </View>
 
-      <TouchableOpacity activeOpacity={0.7} onLongPress={() => setShowConfig(true)}>
-        <Text style={styles.debugText}>Server Backend Connection: {CURRENT_BASE_URL} (Long press to config)</Text>
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onLongPress={() => {
+          if (!isStandaloneApp()) setShowConfig(true);
+        }}
+      >
+        <Text style={styles.debugText}>
+          Server: {CURRENT_BASE_URL}
+          {isStandaloneApp() ? ' (cloud)' : ' (long press to change)'}
+        </Text>
       </TouchableOpacity>
 
       <AppFooter navigation={navigation} />

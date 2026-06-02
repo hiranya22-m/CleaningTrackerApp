@@ -3,7 +3,7 @@ import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity, Platform }
 import { Colors } from '../../theme/colors';
 import MapViewContainer from '../../components/MapViewContainer';
 import CustomButton from '../../components/CustomButton';
-import { jobsAPI, locationAPI, workerAPI, BASE_URL, getAuthTokenStore } from '../../api/client';
+import { jobsAPI, locationAPI, workerAPI, getBaseUrl, getAuthTokenStore } from '../../api/client';
 import io from 'socket.io-client';
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
@@ -197,7 +197,7 @@ const ActiveJobScreen = ({ route, navigation }) => {
   // ── 4. Socket.IO Real-time Connection & Coordinates Broadcast ──
   useEffect(() => {
     if (status === 'started' && assignment && assignment.contractId) {
-      const socket = io(BASE_URL, {
+      const socket = io(getBaseUrl(), {
         auth: { 
           role: 'worker', 
           userId: assignment.workerId._id || assignment.workerId,
@@ -390,7 +390,7 @@ const ActiveJobScreen = ({ route, navigation }) => {
             if (currentToken) {
               await AsyncStorage.setItem('auth_token', String(currentToken));
             }
-            await AsyncStorage.setItem('api_url', String(BASE_URL));
+            await AsyncStorage.setItem('api_url', String(getBaseUrl()));
             await AsyncStorage.setItem('active_job_id', String(job._id));
             await AsyncStorage.setItem('client_lat', String(clientLat));
             await AsyncStorage.setItem('client_lng', String(clientLng));

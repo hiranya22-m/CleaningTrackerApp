@@ -14,25 +14,13 @@ import {
   Image
 } from 'react-native';
 import { Colors } from '../../theme/colors';
-import { contractorAPI, BASE_URL } from '../../api/client';
+import { contractorAPI, getBaseUrl } from '../../api/client';
 import CustomInput from '../../components/CustomInput';
 import AppFooter from '../../components/AppFooter';
 import io from 'socket.io-client';
 import MapViewContainer from '../../components/MapViewContainer';
+import EmbeddedGoogleMap from '../../components/EmbeddedGoogleMap';
 import * as Location from 'expo-location';
-
-// Conditional native modules loader for absolute cross-platform compile safety
-let MapView, Marker;
-if (Platform.OS !== 'web') {
-  try {
-    const mapsModuleName = 'react-native-maps';
-    const Maps = require(mapsModuleName);
-    MapView = Maps.default;
-    Marker = Maps.Marker;
-  } catch (e) {
-    console.warn("Native react-native-maps failed to load in ContractorDashboard picker fallback.", e);
-  }
-}
 
 // ── New York Default Coordinates (Seeder alignment) ──────────────────────────
 const NY_LAT = 40.7128;
@@ -153,7 +141,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
 
   // ── Socket.IO Real-time Listener ────────────────────────────────────────────
   useEffect(() => {
-    const newSocket = io(BASE_URL, {
+    const newSocket = io(getBaseUrl(), {
       auth: { role: 'contractor', userId: user.id }
     });
     setSocket(newSocket);
@@ -721,53 +709,12 @@ const ContractorDashboard = ({ user, onLogout }) => {
                   {/* Google Maps Coordinates Picker */}
                   <Text style={styles.fieldGroupLabel}>Google Maps Location Picker <Text style={{ color: Colors.danger }}>*</Text></Text>
                   <View style={styles.simulatedMapPicker}>
-                    {Platform.OS !== 'web' && MapView && Marker ? (
-                      <MapView
-                        style={StyleSheet.absoluteFillObject}
-                        provider="google"
-                        region={{
-                          latitude: parseFloat(latitude) || NY_LAT,
-                          longitude: parseFloat(longitude) || NY_LNG,
-                          latitudeDelta: 0.015,
-                          longitudeDelta: 0.015,
-                        }}
-                        onPress={(e) => {
-                          if (e.nativeEvent && e.nativeEvent.coordinate) {
-                            const { latitude: newLat, longitude: newLng } = e.nativeEvent.coordinate;
-                            setLatitude(newLat.toString());
-                            setLongitude(newLng.toString());
-                          }
-                        }}
-                      >
-                        <Marker
-                          coordinate={{
-                            latitude: parseFloat(latitude) || NY_LAT,
-                            longitude: parseFloat(longitude) || NY_LNG,
-                          }}
-                          draggable
-                          onDragEnd={(e) => {
-                            if (e.nativeEvent && e.nativeEvent.coordinate) {
-                              const { latitude: newLat, longitude: newLng } = e.nativeEvent.coordinate;
-                              setLatitude(newLat.toString());
-                              setLongitude(newLng.toString());
-                            }
-                          }}
-                          title="Dispatch Target Location"
-                          description="Drag marker or tap map to reposition"
-                          pinColor={Colors.primary}
-                        />
-                      </MapView>
-                    ) : (
-                      <iframe
-                        src={`https://maps.google.com/maps?q=${parseFloat(latitude) || NY_LAT},${parseFloat(longitude) || NY_LNG}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          border: 'none',
-                          borderRadius: 16
-                        }}
-                      />
-                    )}
+                    <EmbeddedGoogleMap
+                      latitude={parseFloat(latitude) || NY_LAT}
+                      longitude={parseFloat(longitude) || NY_LNG}
+                      height={220}
+                      style={{ borderRadius: 16 }}
+                    />
 
                     {/* Interactive coordinate quick-select triggers */}
                     <View style={styles.mapQuickSelectRow}>
