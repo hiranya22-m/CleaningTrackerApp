@@ -11,3 +11,5 @@ yarn-debug.log*
 yarn-error.log*
 *.apk
 *.aab
+frontend/android/
+frontend/ios/
