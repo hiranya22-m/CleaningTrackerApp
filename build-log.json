@@ -1,0 +1,61 @@
+﻿node.exe : Γÿà eas-cli@20.0.0 is now available.
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Γÿà eas-cli@20.0.0 is now available.:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+To upgrade, run:
+npm install -g eas-cli
+Proceeding with outdated version.
+
+- Fetching the buildΓÇª
+ΓêÜ Found a matching build for the project @mhabey/cleaning-tracker
+{
+  "id": "9bb47185-29ed-4cd5-895e-4b031d420adc",
+  "status": "ERRORED",
+  "platform": "ANDROID",
+  "error": {
+    "errorCode": "EAS_BUILD_UNKNOWN_GRADLE_ERROR",
+    "message": "Gradle build failed with unknown error. See logs for the \"Run gradlew\" phase for more information."
+  },
+  "artifacts": {},
+  "fingerprint": {
+    "id": "019e86a5-d009-75ff-9c59-30a3626d2bd5",
+    "hash": "cfabebe4de20a0193e153e5d7c1e8a2d1156038c"
+  },
+  "initiatingActor": {
+    "id": "c742d2dd-4a21-4fe0-a058-75d9bac4ccd6",
+    "displayName": "mhabey"
+  },
+  "logFiles": [
+    "https://storage.googleapis.com/eas-workflows-production/logs/4d6e3d9b-3c3d-41d0-8cba-9d68763acba4/9bb47185-29ed-4cd5-895e-4b031d420adc/2026-06-02T04%3A44%3A36Z-43b75aa0-381c-4ef8-afc9-a348743d244f.txt?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=www-production%40exponentjs.iam.gserviceaccount.com%2F20260602%2Fauto%2Fstorage%2Fgoog4_request&X-Goog-Date=20260602T044631Z&X-Goog-Expires=900&X-Goog-SignedHeaders=host&X-Goog-Signature=30c59cad4f43d7d4443958e3af49c4791d7f780d67af0b7ba5ca5659778bca2a45b1948cdb08bdaa70cd9df05e5f63a3a1ab74cb224dd0420f1217fb39417ebfe24fbc024baadddb43a489cb99d07172e26dd5a171e927c33b853eea91116724b2fe9cf10bab5acc6488edf572baab5a79f35b3b872b52c5d4e012eb1161512161ecedebf89659029c90326de871d1ebb017c2afbee99b18611ce24a1c05e9969f0ed5ca13a41559a29d4eb54f9cf136ec9ad566f16d2bf1786b7fefb6146cd4aa3d08a1e12bf3abaf8a0f43575e5d919f83a29a2a2298c3f4b772d34ae6d9d6ef2aed9441322bcb6103afe9a7f6aab51a3b167ab54dffacc9b3c6735d95472b"
+  ],
+  "project": {
+    "id": "4d6e3d9b-3c3d-41d0-8cba-9d68763acba4",
+    "name": "cleaning-tracker",
+    "slug": "cleaning-tracker",
+    "ownerAccount": {
+      "id": "e201381c-a895-499e-995f-9ed780b04614",
+      "name": "mhabey"
+    }
+  },
+  "distribution": "STORE",
+  "buildProfile": "production",
+  "sdkVersion": "54.0.0",
+  "appVersion": "1.0.2",
+  "appBuildVersion": "3",
+  "gitCommitHash": "0bcc8c4f63658178fa83a8d6e5c8142891b2924c",
+  "gitCommitMessage": "Include active server URL in Login and Register screen error dialogs",
+  "priority": "NORMAL",
+  "createdAt": "2026-06-02T04:44:34.150Z",
+  "updatedAt": "2026-06-02T04:48:14.648Z",
+  "completedAt": "2026-06-02T04:48:14.339Z",
+  "expirationDate": "2026-07-02T04:44:34.179Z",
+  "isForIosSimulator": false,
+  "metrics": {
+    "buildWaitTime": 1921,
+    "buildQueueTime": 4733,
+    "buildDuration": 213535
+  }
+}
