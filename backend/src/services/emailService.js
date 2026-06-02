@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 const env = require('../config/env');
 
 let smtpTransporter = null;
+const RESEND_TIMEOUT_MS = 10000;
 
 const PLACEHOLDER_PASSWORDS = new Set([
   'paste_the_16_chars_from_google_here',
@@ -78,20 +79,33 @@ const sendViaResend = async (to, otpCode, role, isLogin) => {
   const from = (process.env.RESEND_FROM || 'CleanTrack <onboarding@resend.dev>').trim();
   const { subject, html, text } = buildOtpEmailContent(otpCode, role, isLogin);
 
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      from,
-      to: [to],
-      subject,
-      html,
-      text
-    })
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RESEND_TIMEOUT_MS);
+  let response;
+  try {
+    response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from,
+        to: [to],
+        subject,
+        html,
+        text
+      }),
+      signal: controller.signal
+    });
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      throw new Error('Email provider timeout. Please try again in a few seconds.');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   const data = await response.json().catch(() => ({}));
 
@@ -122,10 +136,14 @@ const getSmtpTransporter = async () => {
 
   const { user, pass } = getSmtpCredentials();
 
+  const host = env.smtpHost || 'smtp.gmail.com';
+  const port = env.smtpPort || 465;
+  const secure = port === 465;
+
   smtpTransporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    host,
+    port,
+    secure,
     auth: { user, pass }
   });
 
