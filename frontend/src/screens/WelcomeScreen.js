@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'rea
 import { Colors } from '../theme/colors';
 import AppFooter from '../components/AppFooter';
 import CustomButton from '../components/CustomButton';
+import { BASE_URL } from '../api/client';
 
 const WelcomeScreen = ({ navigation }) => {
   return (
@@ -46,6 +47,8 @@ const WelcomeScreen = ({ navigation }) => {
 
         <Text style={styles.actionFooter}>Enterprise-grade security and automated GPS geofencing built-in.</Text>
       </View>
+
+      <Text style={styles.debugText}>Server Backend Connection: {BASE_URL}</Text>
 
       <AppFooter navigation={navigation} />
     </ScrollView>
@@ -144,6 +147,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.1,
     textAlign: 'center'
+  },
+  debugText: {
+    fontSize: 10,
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 14,
+    fontWeight: '700'
   }
 });
 
