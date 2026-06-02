@@ -44,7 +44,7 @@ const WelcomeScreen = ({ navigation }) => {
               style={styles.modalInput}
               value={inputUrl}
               onChangeText={setInputUrl}
-              placeholder="http://10.130.45.181:5000"
+              placeholder="https://cleaningtrackerapp-production.up.railway.app"
               placeholderTextColor="#94A3B8"
               autoCapitalize="none"
               autoCorrect={false}

@@ -46,8 +46,8 @@ const getBackendUrl = () => {
     return fallback;
   }
 
-  // Point to the local machine IP address for physical APK testing!
-  return 'http://10.130.45.181:5000';
+  // Point to the live production server hosted on Railway!
+  return 'https://cleaningtrackerapp-production.up.railway.app';
 };
 
 export const BASE_URL = getBackendUrl();
