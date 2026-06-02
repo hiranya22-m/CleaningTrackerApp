@@ -126,12 +126,19 @@ exports.requestOtp = async (req, res) => {
     try {
       emailResult = await emailService.sendOtpEmail(cleanEmail, rawOtp, requestedRole, isLogin);
     } catch (emailErr) {
-      await OTPVerification.deleteMany({ email: cleanEmail });
-      console.error('OTP email failed:', emailErr.message);
-      return res.status(503).json({
-        success: false,
-        message: emailErr.message || 'Could not send verification email. Please check your SMTP configuration.'
-      });
+      console.error('OTP email sending failed:', emailErr.message);
+      
+      // If test mode is enabled, print code to logs and proceed instead of crashing!
+      if (process.env.ALLOW_TEST_OTP === 'true') {
+        console.log(`[TEST MODE OTP] Email failed, but ALLOW_TEST_OTP is enabled. Verification Code is: ${rawOtp}`);
+        emailResult = { to: cleanEmail };
+      } else {
+        await OTPVerification.deleteMany({ email: cleanEmail });
+        return res.status(503).json({
+          success: false,
+          message: emailErr.message || 'Could not send verification email. Please check your SMTP configuration.'
+        });
+      }
     }
 
     res.status(200).json({
