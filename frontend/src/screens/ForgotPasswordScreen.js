@@ -48,7 +48,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
     >
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <TouchableOpacity style={styles.backLink} onPress={() => navigation.goBack()}>
-          <Text style={styles.backLinkText}>← Back to Login</Text>
+          <Text style={styles.backLinkText}>← Back</Text>
         </TouchableOpacity>
 
         <View style={styles.card}>

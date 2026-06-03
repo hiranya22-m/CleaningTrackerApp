@@ -182,7 +182,7 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
     >
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <TouchableOpacity style={styles.backLink} onPress={() => navigation.goBack()}>
-          <Text style={styles.backLinkText}>← Back to Welcome</Text>
+          <Text style={styles.backLinkText}>← Back</Text>
         </TouchableOpacity>
 
         <View style={styles.card}>

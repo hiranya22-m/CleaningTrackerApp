@@ -166,8 +166,8 @@ const RegisterScreen = ({ navigation }) => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <TouchableOpacity style={styles.backLink} onPress={() => navigation.navigate('Welcome')}>
-          <Text style={styles.backLinkText}>← Back to Welcome</Text>
+        <TouchableOpacity style={styles.backLink} onPress={() => navigation.goBack()}>
+          <Text style={styles.backLinkText}>← Back</Text>
         </TouchableOpacity>
 
         <View style={styles.card}>

@@ -1,6 +1,17 @@
 import React, { useState, useRef } from 'react';
-import { View, TextInput, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback } from 'react-native';
+import { View, TextInput, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback, Modal, FlatList, Platform } from 'react-native';
 import { Colors } from '../theme/colors';
+
+const COUNTRIES = [
+  { code: '+94', flag: '🇱🇰', name: 'Sri Lanka' },
+  { code: '+1', flag: '🇺🇸', name: 'United States' },
+  { code: '+44', flag: '🇬🇧', name: 'United Kingdom' },
+  { code: '+61', flag: '🇦🇺', name: 'Australia' },
+  { code: '+91', flag: '🇮🇳', name: 'India' },
+  { code: '+65', flag: '🇸🇬', name: 'Singapore' },
+  { code: '+971', flag: '🇦🇪', name: 'UAE' },
+  { code: '+64', flag: '🇳🇿', name: 'New Zealand' },
+];
 
 const CustomInput = ({
   label,
@@ -13,13 +24,18 @@ const CustomInput = ({
   error,
   icon, // Prefix icon emoji or symbol
   required = false,
+  isPhoneInput = false,
+  countryCode = '+94',
+  onCountryCodeChange,
   ...props
 }) => {
   const [isFocused, setIsFocused] = useState(false);
   const [isSecureVisible, setIsSecureVisible] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
   const inputRef = useRef(null);
 
   const shouldBeSecure = secureTextEntry && !isSecureVisible;
+  const selectedCountry = COUNTRIES.find((c) => c.code === countryCode) || COUNTRIES[0];
 
   return (
     <View style={styles.container}>
@@ -28,6 +44,7 @@ const CustomInput = ({
           {label} {required ? <Text style={{ color: Colors.danger }}>*</Text> : null}
         </Text>
       ) : null}
+      
       <TouchableWithoutFeedback onPress={() => inputRef.current?.focus()}>
         <View
           style={[
@@ -36,7 +53,18 @@ const CustomInput = ({
             error ? styles.inputError : null
           ]}
         >
-          {icon ? <Text style={styles.prefixIcon}>{icon}</Text> : null}
+          {isPhoneInput ? (
+            <TouchableOpacity
+              style={styles.countryPicker}
+              onPress={() => setShowDropdown(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.countryPickerText}>{selectedCountry.flag} {selectedCountry.code}</Text>
+              <Text style={styles.dropdownArrow}>▼</Text>
+            </TouchableOpacity>
+          ) : icon ? (
+            <Text style={styles.prefixIcon}>{icon}</Text>
+          ) : null}
           
           <TextInput
             ref={inputRef}
@@ -67,7 +95,47 @@ const CustomInput = ({
           ) : null}
         </View>
       </TouchableWithoutFeedback>
+      
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+      {/* Country Selection Modal */}
+      {isPhoneInput && (
+        <Modal
+          visible={showDropdown}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowDropdown(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowDropdown(false)}>
+            <View style={styles.modalOverlay}>
+              <TouchableWithoutFeedback>
+                <View style={styles.dropdownModal}>
+                  <Text style={styles.dropdownTitle}>Select Country Code</Text>
+                  <FlatList
+                    data={COUNTRIES}
+                    keyExtractor={(item) => item.code}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={styles.dropdownItem}
+                        onPress={() => {
+                          if (onCountryCodeChange) {
+                            onCountryCodeChange(item.code);
+                          }
+                          setShowDropdown(false);
+                        }}
+                      >
+                        <Text style={styles.dropdownItemFlag}>{item.flag}</Text>
+                        <Text style={styles.dropdownItemName}>{item.name}</Text>
+                        <Text style={styles.dropdownItemCode}>{item.code}</Text>
+                      </TouchableOpacity>
+                    )}
+                  />
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
     </View>
   );
 };
@@ -133,6 +201,77 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
     fontWeight: '600'
+  },
+  // Country Picker styling
+  countryPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 8,
+    borderRightWidth: 1.2,
+    borderRightColor: '#E2E8F0',
+    paddingRight: 10,
+    height: '100%'
+  },
+  countryPickerText: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: '#1E293B'
+  },
+  dropdownArrow: {
+    fontSize: 8,
+    color: '#64748B',
+    marginLeft: 6
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)', // Glassmorphic translucent blur overlay
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  dropdownModal: {
+    width: '100%',
+    maxWidth: 280,
+    maxHeight: 350,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8
+  },
+  dropdownTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginBottom: 12,
+    textAlign: 'center'
+  },
+  dropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1.2,
+    borderBottomColor: '#F1F5F9'
+  },
+  dropdownItemFlag: {
+    fontSize: 18,
+    marginRight: 10
+  },
+  dropdownItemName: {
+    fontSize: 13.5,
+    color: '#1E293B',
+    fontWeight: '600',
+    flex: 1
+  },
+  dropdownItemCode: {
+    fontSize: 13.5,
+    color: '#64748B',
+    fontWeight: '800'
   }
 });
 

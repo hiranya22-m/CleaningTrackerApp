@@ -151,18 +151,16 @@ let userToken = '';
 let currentUser = null;
 
 // Cross-platform session load helper
-export const loadPersistentSession = () => {
+export const loadPersistentSession = async () => {
   try {
-    if (Platform.OS === 'web') {
-      const savedToken = localStorage.getItem('sparkleflow_token');
-      const savedUser = localStorage.getItem('sparkleflow_user');
+    const savedToken = await AsyncStorage.getItem('sparkleflow_token');
+    const savedUser = await AsyncStorage.getItem('sparkleflow_user');
 
-      if (savedToken && savedUser) {
-        userToken = savedToken;
-        currentUser = JSON.parse(savedUser);
-        apiClient.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
-        return { token: savedToken, user: currentUser };
-      }
+    if (savedToken && savedUser) {
+      userToken = savedToken;
+      currentUser = JSON.parse(savedUser);
+      apiClient.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
+      return { token: savedToken, user: currentUser };
     }
   } catch (e) {
     console.error('Failed to load persistent session:', e.message);
@@ -170,35 +168,31 @@ export const loadPersistentSession = () => {
   return null;
 };
 
-export const setAuthToken = (token) => {
+export const setAuthToken = async (token) => {
   userToken = token;
   if (token) {
     apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
     try {
-      if (Platform.OS === 'web') {
-        localStorage.setItem('sparkleflow_token', token);
-      }
+      await AsyncStorage.setItem('sparkleflow_token', token);
     } catch (e) {
       console.error('Failed to cache token:', e.message);
     }
   } else {
     delete apiClient.defaults.headers.common['Authorization'];
     try {
-      if (Platform.OS === 'web') {
-        localStorage.removeItem('sparkleflow_token');
-        localStorage.removeItem('sparkleflow_user');
-      }
+      await AsyncStorage.removeItem('sparkleflow_token');
+      await AsyncStorage.removeItem('sparkleflow_user');
     } catch (e) {
       console.error('Failed to clear token cache:', e.message);
     }
   }
 };
 
-export const setCurrentUserStore = (user) => {
+export const setCurrentUserStore = async (user) => {
   currentUser = user;
   try {
-    if (Platform.OS === 'web' && user) {
-      localStorage.setItem('sparkleflow_user', JSON.stringify(user));
+    if (user) {
+      await AsyncStorage.setItem('sparkleflow_user', JSON.stringify(user));
     }
   } catch (e) {
     console.error('Failed to cache user profile:', e.message);
@@ -211,10 +205,10 @@ export const getAuthTokenStore = () => userToken;
 // Response interceptor to handle global session expiry (401 Unauthorized)
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response && error.response.status === 401) {
-      setAuthToken('');
-      setCurrentUserStore(null);
+      await setAuthToken('');
+      await setCurrentUserStore(null);
 
       if (Platform.OS === 'web') {
         window.location.reload();
@@ -229,8 +223,8 @@ export const authAPI = {
   login: async (email, password) => {
     const res = await apiClient.post('/auth/login', { email, password });
     if (res.data.success) {
-      setAuthToken(res.data.token);
-      setCurrentUserStore(res.data.user);
+      await setAuthToken(res.data.token);
+      await setCurrentUserStore(res.data.user);
     }
     return res.data;
   },
@@ -256,8 +250,8 @@ export const authAPI = {
       companyName
     });
     if (res.data.success) {
-      setAuthToken(res.data.token);
-      setCurrentUserStore(res.data.user);
+      await setAuthToken(res.data.token);
+      await setCurrentUserStore(res.data.user);
     }
     return res.data;
   },
@@ -282,8 +276,8 @@ export const authAPI = {
       companyName
     });
     if (res.data.success) {
-      setAuthToken(res.data.token);
-      setCurrentUserStore(res.data.user);
+      await setAuthToken(res.data.token);
+      await setCurrentUserStore(res.data.user);
     }
     return res.data;
   },

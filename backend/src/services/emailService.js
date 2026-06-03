@@ -36,18 +36,13 @@ const hasResend = () => {
   return key.length > 10 && key.startsWith('re_');
 };
 
-const hasBrevo = () => {
-  const key = (process.env.BREVO_API_KEY || '').trim();
-  return key.length > 10;
-};
-
 const isSmtpConfigured = () => {
   const { user, pass } = getSmtpCredentials();
   return !!(user && isRealAppPassword(pass));
 };
 
-/** Gmail SMTP, Resend API, or Brevo API must be configured to send OTP emails */
-const isEmailConfigured = () => isSmtpConfigured() || hasResend() || hasBrevo();
+/** Gmail SMTP or Resend API must be configured to send OTP emails */
+const isEmailConfigured = () => isSmtpConfigured() || hasResend();
 
 const getRoleLabel = (role) => {
   if (role === 'contractor') return 'Contractor';
@@ -135,58 +130,6 @@ const sendViaResend = async (to, otpCode, role, isLogin) => {
   return { messageId: data.id, to, provider: 'resend' };
 };
 
-const sendViaBrevo = async (to, otpCode, role, isLogin) => {
-  const apiKey = process.env.BREVO_API_KEY.trim();
-  const fromEmail = (process.env.BREVO_SENDER_EMAIL || 'nethmihiranya22@gmail.com').trim();
-  const fromName = 'CleanTrack';
-  const { subject, html, text } = buildOtpEmailContent(otpCode, role, isLogin);
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10000); // 10s timeout
-
-  let response;
-  try {
-    response = await fetch('https://api.brevo.com/v3/smtp/email', {
-      method: 'POST',
-      headers: {
-        'api-key': apiKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        sender: {
-          name: fromName,
-          email: fromEmail
-        },
-        to: [
-          {
-            email: to
-          }
-        ],
-        subject,
-        htmlContent: html,
-        textContent: text
-      }),
-      signal: controller.signal
-    });
-  } catch (err) {
-    if (err && err.name === 'AbortError') {
-      throw new Error('Email provider timeout. Please try again in a few seconds.');
-    }
-    throw err;
-  } finally {
-    clearTimeout(timer);
-  }
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(data.message || `Brevo API error (${response.status})`);
-  }
-
-  console.log(`📧 OTP sent via Brevo to ${to} (messageId: ${data.messageId || 'unknown'})`);
-  return { messageId: data.messageId || 'unknown', to, provider: 'brevo' };
-};
-
 const getSmtpTransporter = async () => {
   if (smtpTransporter) return smtpTransporter;
 
@@ -239,12 +182,8 @@ exports.sendOtpEmail = async (recipientEmail, otpCode, role = 'worker', isLogin 
 
   if (!isEmailConfigured()) {
     throw new Error(
-      'Email is not configured. Add Brevo (BREVO_API_KEY) or Gmail SMTP (SMTP_USER + SMTP_PASS) or Resend (RESEND_API_KEY) in backend/.env'
+      'Email is not configured. Add Gmail SMTP (SMTP_USER + SMTP_PASS) or Resend (RESEND_API_KEY) in backend/.env'
     );
-  }
-
-  if (hasBrevo()) {
-    return sendViaBrevo(to, otpCode, role, isLogin);
   }
 
   if (hasResend()) {
@@ -258,11 +197,6 @@ exports.isSmtpConfigured = isSmtpConfigured;
 exports.isEmailConfigured = isEmailConfigured;
 
 exports.verifySmtpOnStartup = async () => {
-  if (hasBrevo()) {
-    console.log('✅ Brevo API configured — OTP emails enabled');
-    return true;
-  }
-
   if (hasResend()) {
     console.log('✅ Resend API configured — OTP emails enabled');
     const from = (process.env.RESEND_FROM || '').trim();
@@ -328,7 +262,7 @@ exports.verifySmtpOnStartup = async () => {
 exports.sendWelcomeEmail = async (user) => {
   if (!isEmailConfigured()) return;
   try {
-    if (hasResend() || hasBrevo()) return;
+    if (hasResend()) return;
     const transporter = await getSmtpTransporter();
     const { user: smtpUser } = getSmtpCredentials();
     await transporter.sendMail({
@@ -345,6 +279,5 @@ exports.sendWelcomeEmail = async (user) => {
 exports.getEmailConfigStatus = () => ({
   configured: isEmailConfigured(),
   gmail: isSmtpConfigured(),
-  resend: hasResend(),
-  brevo: hasBrevo()
+  resend: hasResend()
 });

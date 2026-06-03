@@ -30,7 +30,7 @@ export default function App() {
   useEffect(() => {
     const validateAndRestoreSession = async () => {
       await initializeBaseUrl(); // Load custom saved backend URL override first!
-      const session = loadPersistentSession();
+      const session = await loadPersistentSession();
       if (session && session.token) {
         try {
           // Validate the token by hitting the profile endpoint
