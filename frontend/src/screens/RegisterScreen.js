@@ -27,10 +27,10 @@ const ROLES = [
 const RegisterScreen = ({ navigation }) => {
   const [selectedRole, setSelectedRole] = useState('worker');
 
-  // Form Fields
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [countryCode, setCountryCode] = useState('+94');
   const [companyName, setCompanyName] = useState('');
 
   const [loading, setLoading] = useState(false);
@@ -72,7 +72,8 @@ const RegisterScreen = ({ navigation }) => {
       valid = false;
     }
 
-    const cleanPhone = String(phoneNumber).replace(/[\s\-().]/g, '');
+    const fullPhoneNumber = `${countryCode}${phoneNumber.trim().replace(/^0/, '')}`;
+    const cleanPhone = fullPhoneNumber.replace(/[\s\-().+]/g, '');
     if (!phoneNumber) {
       newErrors.phoneNumber = 'Phone Number is required';
       valid = false;
@@ -97,11 +98,12 @@ const RegisterScreen = ({ navigation }) => {
     setLoading(true);
     try {
       const trimmedEmail = email.toLowerCase().trim();
+      const fullPhoneNumber = `${countryCode}${phoneNumber.trim().replace(/^0/, '')}`;
       const res = await authAPI.requestOtp(
         trimmedEmail,
         selectedRole,
         name.trim(),
-        phoneNumber.trim(),
+        fullPhoneNumber,
         selectedRole === 'contractor' ? companyName.trim() : ''
       );
       setLoading(false);
@@ -114,7 +116,7 @@ const RegisterScreen = ({ navigation }) => {
             email: trimmedEmail,
             role: selectedRole,
             name: name.trim(),
-            phoneNumber: phoneNumber.trim(),
+            phoneNumber: fullPhoneNumber,
             companyName: selectedRole === 'contractor' ? companyName.trim() : ''
           });
         } else {
@@ -130,7 +132,7 @@ const RegisterScreen = ({ navigation }) => {
                     email: trimmedEmail,
                     role: selectedRole,
                     name: name.trim(),
-                    phoneNumber: phoneNumber.trim(),
+                    phoneNumber: fullPhoneNumber,
                     companyName: selectedRole === 'contractor' ? companyName.trim() : ''
                   });
                 }
@@ -245,8 +247,10 @@ const RegisterScreen = ({ navigation }) => {
               label="Phone Number"
               value={phoneNumber}
               onChangeText={(v) => { setPhoneNumber(v); setErrors((e) => ({ ...e, phoneNumber: '' })); }}
-              placeholder="+94 77 123 4567"
-              icon="📞"
+              placeholder="77 123 4567"
+              isPhoneInput={true}
+              countryCode={countryCode}
+              onCountryCodeChange={setCountryCode}
               keyboardType="phone-pad"
               error={errors.phoneNumber}
               required

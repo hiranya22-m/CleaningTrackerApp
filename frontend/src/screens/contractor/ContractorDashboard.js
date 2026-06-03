@@ -11,7 +11,8 @@ import {
   ActivityIndicator,
   Animated,
   Platform,
-  Image
+  Image,
+  BackHandler
 } from 'react-native';
 import { Colors } from '../../theme/colors';
 import { contractorAPI, getBaseUrl } from '../../api/client';
@@ -39,6 +40,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
   // ── Contract Form State ─────────────────────────────────────────────────────
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
+  const [clientCountryCode, setClientCountryCode] = useState('+94');
   const [address, setAddress] = useState('');
   const [latitude, setLatitude] = useState(NY_LAT.toString());
   const [longitude, setLongitude] = useState(NY_LNG.toString());
@@ -138,6 +140,24 @@ const ContractorDashboard = ({ user, onLogout }) => {
       fetchCurrentLocation();
     }
   }, [activeTab]);
+
+  // Handle hardware back press (Android)
+  useEffect(() => {
+    const backAction = () => {
+      if (activeTab === 'newContract' && selectedPackage !== null) {
+        fadeTransition(() => setSelectedPackage(null));
+        return true; // prevent default behavior
+      }
+      return false; // run default behavior
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [activeTab, selectedPackage]);
 
   // ── Socket.IO Real-time Listener ────────────────────────────────────────────
   useEffect(() => {
@@ -329,6 +349,13 @@ const ContractorDashboard = ({ user, onLogout }) => {
       return;
     }
 
+    const fullPhoneNumber = `${clientCountryCode}${clientPhone.trim().replace(/^0/, '')}`;
+    const cleanPhone = fullPhoneNumber.replace(/[\s\-().+]/g, '');
+    if (cleanPhone.length < 9 || cleanPhone.length > 15) {
+      Alert.alert('Invalid Phone Number', 'Enter a valid client phone number (9–15 digits)');
+      return;
+    }
+
     const minCrew = selectedPackage.name === 'Premium' ? requiredWorkersCount : 1;
     if (selectedWorkers.length < minCrew) {
       Alert.alert(
@@ -342,7 +369,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
     try {
       const contractData = {
         clientName: clientName.trim(),
-        clientPhone: clientPhone.trim(),
+        clientPhone: fullPhoneNumber,
         address: address.trim(),
         latitude: parseFloat(latitude),
         longitude: parseFloat(longitude),
@@ -668,8 +695,10 @@ const ContractorDashboard = ({ user, onLogout }) => {
                     label="Client Phone Number"
                     value={clientPhone}
                     onChangeText={setClientPhone}
-                    placeholder="+94 77 123 4567"
-                    icon="📞"
+                    placeholder="77 123 4567"
+                    isPhoneInput={true}
+                    countryCode={clientCountryCode}
+                    onCountryCodeChange={setClientCountryCode}
                     keyboardType="phone-pad"
                     required
                   />
@@ -760,27 +789,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
                     required
                   />
 
-                  {/* Manual Coordinate Override Fields */}
-                  <View style={styles.rowFields}>
-                    <View style={{ width: '48%' }}>
-                      <CustomInput
-                        label="Latitude"
-                        value={latitude}
-                        onChangeText={setLatitude}
-                        placeholder="e.g. 40.7527"
-                        keyboardType="numeric"
-                      />
-                    </View>
-                    <View style={{ width: '48%' }}>
-                      <CustomInput
-                        label="Longitude"
-                        value={longitude}
-                        onChangeText={setLongitude}
-                        placeholder="e.g. -73.9772"
-                        keyboardType="numeric"
-                      />
-                    </View>
-                  </View>
+
 
                   {/* Date, Time, Duration */}
                   <View style={styles.rowFields}>

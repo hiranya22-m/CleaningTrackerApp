@@ -10,7 +10,8 @@ import {
   TouchableOpacity,
   TextInput,
   Animated,
-  Image
+  Image,
+  BackHandler
 } from 'react-native';
 import { Colors } from '../theme/colors';
 import { authAPI, CURRENT_BASE_URL } from '../api/client';
@@ -109,6 +110,25 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
     }
     return () => clearInterval(interval);
   }, [otpStep, timer]);
+
+  // Handle hardware back press (Android)
+  useEffect(() => {
+    const backAction = () => {
+      if (isOtpRole && otpStep === 2) {
+        setOtpStep(1);
+        setOtpCode('');
+        return true; // prevent default behavior
+      }
+      return false; // run default behavior
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [otpStep, selectedRole]);
 
   // Resend cooldown
   useEffect(() => {
@@ -260,7 +280,17 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <TouchableOpacity style={styles.backLink} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.backLink}
+          onPress={() => {
+            if (isOtpRole && otpStep === 2) {
+              setOtpStep(1);
+              setOtpCode('');
+            } else {
+              navigation.goBack();
+            }
+          }}
+        >
           <Text style={styles.backLinkText}>← Back</Text>
         </TouchableOpacity>
 

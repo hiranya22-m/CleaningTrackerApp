@@ -40,16 +40,25 @@ export default function App() {
             // Token is valid — restore session with fresh user data from server
             setToken(session.token);
             setUser(profileRes.user);
+            await setCurrentUserStore(profileRes.user);
           } else {
             // Invalid response — clear stale session
-            setAuthToken('');
+            await setAuthToken('');
             setUser(null);
           }
         } catch (err) {
-          // Token rejected by server (401/403) — stale session, clear it
-          console.log('Stale session cleared:', err.response?.status, err.message);
-          setAuthToken(''); // Clears localStorage too
-          setUser(null);
+          // Only clear the session if the token was explicitly rejected (401/403)
+          console.log('Session validation error:', err.response?.status, err.message);
+          const status = err.response?.status;
+          if (status === 401 || status === 403) {
+            await setAuthToken('');
+            setUser(null);
+          } else {
+            // Network error, timeout or server crash — restore session from offline storage!
+            console.log('Offline / server network issue. Restoring session from cache.');
+            setToken(session.token);
+            setUser(session.user);
+          }
         }
       }
       setLoadingSession(false);
@@ -58,10 +67,10 @@ export default function App() {
     validateAndRestoreSession();
   }, []);
 
-  const handleLoginSuccess = (loggedInUser, userToken) => {
+  const handleLoginSuccess = async (loggedInUser, userToken) => {
     setToken(userToken);
-    setAuthToken(userToken);
-    setCurrentUserStore(loggedInUser); // Cache user profile
+    await setAuthToken(userToken);
+    await setCurrentUserStore(loggedInUser); // Cache user profile
     setUser(loggedInUser);
     
     // For React Native Web: force a clean browser reload to clear active navigation state
@@ -71,9 +80,9 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setToken('');
-    setAuthToken(''); // Clears dynamic localStorage cache
+    await setAuthToken(''); // Clears dynamic storage cache
     setUser(null);
     
     if (Platform.OS === 'web') {

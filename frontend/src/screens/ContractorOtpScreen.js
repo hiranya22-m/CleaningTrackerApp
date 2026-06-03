@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, Image, BackHandler } from 'react-native';
 import { Colors } from '../theme/colors';
 import CustomInput from '../components/CustomInput';
 import CustomButton from '../components/CustomButton';
@@ -10,6 +10,7 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [countryCode, setCountryCode] = useState('+94');
   const [companyName, setCompanyName] = useState('');
   const [isRegister, setIsRegister] = useState(false); // Toggle between Sign In & Register
 
@@ -46,6 +47,25 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
     return () => clearInterval(interval);
   }, [resendCooldown]);
 
+  // Handle hardware back press (Android)
+  useEffect(() => {
+    const backAction = () => {
+      if (step === 2) {
+        setStep(1);
+        setOtpCode('');
+        return true; // prevent default behavior
+      }
+      return false; // run default behavior
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [step]);
+
   const validateStep1 = () => {
     let valid = true;
     let newErrors = {};
@@ -69,12 +89,13 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
         valid = false;
       }
 
-      const phoneRegex = /^\+?([0-9]{1,3})?[-. ]?([0-9]{3})[-. ]?([0-9]{3})[-. ]?([0-9]{4})$/;
+      const fullPhoneNumber = `${countryCode}${phoneNumber.trim().replace(/^0/, '')}`;
+      const cleanPhone = fullPhoneNumber.replace(/[\s\-().+]/g, '');
       if (!phoneNumber) {
         newErrors.phoneNumber = 'Phone Number is required';
         valid = false;
-      } else if (!phoneRegex.test(phoneNumber)) {
-        newErrors.phoneNumber = 'Phone format: +1 (555) 123-4567';
+      } else if (cleanPhone.length < 9 || cleanPhone.length > 15) {
+        newErrors.phoneNumber = 'Enter a valid phone number (9–15 digits)';
         valid = false;
       }
     }
@@ -87,11 +108,12 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
     if (!validateStep1()) return;
 
     setLoading(true);
+    const fullPhoneNumber = `${countryCode}${phoneNumber.trim().replace(/^0/, '')}`;
     try {
       const res = await authAPI.contractorRequestOtp(
         email,
         isRegister ? name : '',
-        isRegister ? phoneNumber : '',
+        isRegister ? fullPhoneNumber : '',
         isRegister ? companyName : ''
       );
       setLoading(false);
@@ -136,12 +158,13 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
     }
 
     setLoading(true);
+    const fullPhoneNumber = `${countryCode}${phoneNumber.trim().replace(/^0/, '')}`;
     try {
       const res = await authAPI.contractorVerifyOtp(
         email,
         otpCode,
         isRegister ? name : '',
-        isRegister ? phoneNumber : '',
+        isRegister ? fullPhoneNumber : '',
         isRegister ? companyName : ''
       );
       setLoading(false);
@@ -181,7 +204,17 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <TouchableOpacity style={styles.backLink} onPress={() => navigation.goBack()}>
+        <TouchableOpacity
+          style={styles.backLink}
+          onPress={() => {
+            if (step === 2) {
+              setStep(1);
+              setOtpCode('');
+            } else {
+              navigation.goBack();
+            }
+          }}
+        >
           <Text style={styles.backLinkText}>← Back</Text>
         </TouchableOpacity>
 
@@ -250,9 +283,11 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
                     label="Phone Number"
                     value={phoneNumber}
                     onChangeText={setPhoneNumber}
-                    placeholder="+1 (555) 123-4567"
+                    placeholder="77 123 4567"
+                    isPhoneInput={true}
+                    countryCode={countryCode}
+                    onCountryCodeChange={setCountryCode}
                     keyboardType="phone-pad"
-                    icon="📞"
                     error={errors.phoneNumber}
                     required
                   />
