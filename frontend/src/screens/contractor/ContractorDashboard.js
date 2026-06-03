@@ -91,6 +91,39 @@ const ContractorDashboard = ({ user, onLogout }) => {
     });
   };
 
+  // ── Reverse Geocode Handler (coordinates -> English address) ──
+  const handleReverseGeocode = async (lat, lng) => {
+    try {
+      const response = await fetch(
+        `https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}&lang=en`
+      );
+      const data = await response.json();
+      if (data && data.features && data.features.length > 0) {
+        const props = data.features[0].properties || {};
+        const parts = [];
+        if (props.name) parts.push(props.name);
+        if (props.housenumber) parts.push(props.housenumber);
+        if (props.street) parts.push(props.street);
+        if (props.district) parts.push(props.district);
+        if (props.city) parts.push(props.city);
+        if (props.state) parts.push(props.state);
+        if (props.postcode) parts.push(props.postcode);
+        if (props.country) parts.push(props.country);
+        
+        let displayName = parts.filter(Boolean).join(', ');
+        
+        // Clean up Sinhala/Tamil characters for Sri Lanka
+        displayName = displayName
+          .replace(/ශ්‍රී ලංකාව/g, 'Sri Lanka')
+          .replace(/இலங்கை/g, 'Sri Lanka');
+          
+        setAddress(displayName);
+      }
+    } catch (e) {
+      console.warn('Reverse geocoding error:', e.message);
+    }
+  };
+
   // ── Fetch Packages & Contracts ──────────────────────────────────────────────
   const loadInitialData = async () => {
     try {
@@ -130,6 +163,8 @@ const ContractorDashboard = ({ user, onLogout }) => {
           
           setLatitude(currentLat.toString());
           setLongitude(currentLng.toString());
+          // Auto reverse-geocode device coordinates
+          handleReverseGeocode(currentLat, currentLng);
         }
       } catch (err) {
         console.warn('Error fetching device location for Contractor Dashboard:', err.message);
@@ -252,9 +287,9 @@ const ContractorDashboard = ({ user, onLogout }) => {
 
     try {
       setSearchingPlace(true);
-      // Query Photon (Komoot) autocomplete service which is designed for search-as-you-type and does not block client IPs
+      // Query Photon (Komoot) autocomplete service with English language output
       const response = await fetch(
-        `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5`
+        `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&lang=en`
       );
       const data = await response.json();
       
@@ -274,7 +309,12 @@ const ContractorDashboard = ({ user, onLogout }) => {
           if (props.postcode) parts.push(props.postcode);
           if (props.country) parts.push(props.country);
           
-          const displayName = parts.filter(Boolean).join(', ');
+          let displayName = parts.filter(Boolean).join(', ');
+          
+          // Clean up Sinhala/Tamil characters for Sri Lanka
+          displayName = displayName
+            .replace(/ශ්‍රී ලංකාව/g, 'Sri Lanka')
+            .replace(/இலங்கை/g, 'Sri Lanka');
           
           return {
             lat: coords[1], // Latitude is index 1
@@ -786,6 +826,11 @@ const ContractorDashboard = ({ user, onLogout }) => {
                     longitude={parseFloat(longitude) || NY_LNG}
                     height={220}
                     style={{ borderRadius: 16, marginBottom: 14 }}
+                    onLocationSelect={(lat, lng) => {
+                      setLatitude(lat.toString());
+                      setLongitude(lng.toString());
+                      handleReverseGeocode(lat, lng);
+                    }}
                   />
 
                   {address ? (
