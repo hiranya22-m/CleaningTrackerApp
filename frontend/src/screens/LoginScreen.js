@@ -11,7 +11,8 @@ import {
   TextInput,
   Animated,
   Image,
-  BackHandler
+  BackHandler,
+  RefreshControl
 } from 'react-native';
 import { Colors } from '../theme/colors';
 import { authAPI, CURRENT_BASE_URL } from '../api/client';
@@ -68,7 +69,21 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
   const [resendCooldown, setResendCooldown] = useState(0);
 
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [errors, setErrors] = useState({});
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setAdminEmail('');
+    setAdminPassword('');
+    setOtpEmail('');
+    setOtpCode('');
+    setOtpStep(1);
+    setErrors({});
+    setTimer(300);
+    setResendCooldown(0);
+    setRefreshing(false);
+  };
 
   const params = route?.params;
 
@@ -279,6 +294,9 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
+        }
       >
         <TouchableOpacity
           style={styles.backLink}

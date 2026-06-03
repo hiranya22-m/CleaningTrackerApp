@@ -10,7 +10,8 @@ import {
   TouchableOpacity,
   TextInput,
   Animated,
-  Image
+  Image,
+  RefreshControl
 } from 'react-native';
 import { Colors } from '../theme/colors';
 import { authAPI, CURRENT_BASE_URL } from '../api/client';
@@ -34,7 +35,19 @@ const RegisterScreen = ({ navigation }) => {
   const [companyName, setCompanyName] = useState('');
 
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [errors, setErrors] = useState({});
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setName('');
+    setEmail('');
+    setPhoneNumber('');
+    setCountryCode('+94');
+    setCompanyName('');
+    setErrors({});
+    setRefreshing(false);
+  };
 
   // Fade animation for role switching transitions
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -167,6 +180,9 @@ const RegisterScreen = ({ navigation }) => {
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
+        }
       >
         <TouchableOpacity style={styles.backLink} onPress={() => navigation.goBack()}>
           <Text style={styles.backLinkText}>← Back</Text>

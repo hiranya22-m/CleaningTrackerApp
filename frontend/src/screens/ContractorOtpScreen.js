@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, Image, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, Alert, TouchableOpacity, Image, BackHandler, RefreshControl } from 'react-native';
 import { Colors } from '../theme/colors';
 import CustomInput from '../components/CustomInput';
 import CustomButton from '../components/CustomButton';
@@ -17,9 +17,25 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
   const [otpCode, setOtpCode] = useState('');
   const [step, setStep] = useState(1); // 1: Enter details/Email, 2: Enter OTP
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [timer, setTimer] = useState(300); // 5 minutes countdown
   const [resendCooldown, setResendCooldown] = useState(0);
   const [errors, setErrors] = useState({});
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setEmail('');
+    setName('');
+    setPhoneNumber('');
+    setCountryCode('+94');
+    setCompanyName('');
+    setOtpCode('');
+    setStep(1);
+    setErrors({});
+    setTimer(300);
+    setResendCooldown(0);
+    setRefreshing(false);
+  };
 
   // Countdown timer effect
   useEffect(() => {
@@ -203,7 +219,9 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
+      }>
         <TouchableOpacity
           style={styles.backLink}
           onPress={() => {

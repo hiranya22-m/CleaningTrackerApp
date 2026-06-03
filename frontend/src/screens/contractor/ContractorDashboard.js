@@ -419,6 +419,26 @@ const ContractorDashboard = ({ user, onLogout }) => {
     }
   };
 
+  const handleFormRefresh = async () => {
+    setRefreshing(true);
+    setClientName('');
+    setClientPhone('');
+    setAddress('');
+    setLatitude(NY_LAT.toString());
+    setLongitude(NY_LNG.toString());
+    setNotes('');
+    setDate('2026-05-30');
+    setStartTime('09:00');
+    setDurationMinutes('120');
+    setRequiredWorkersCount(1);
+    setIsUrgent(false);
+    setSearchQuery('');
+    setSearchSuggestions([]);
+    setSelectedWorkers([]);
+    await loadInitialData();
+    setRefreshing(false);
+  };
+
   // Helper remaining response timer
   const renderRemainingTime = (deadline) => {
     const remainingMs = new Date(deadline) - new Date();
@@ -458,7 +478,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={loadInitialData} tintColor={Colors.primary} />
+          <RefreshControl refreshing={refreshing} onRefresh={activeTab === 'newContract' ? handleFormRefresh : loadInitialData} tintColor={Colors.primary} />
         }
       >
         <Animated.View style={{ opacity: fadeAnim }}>
@@ -744,50 +764,14 @@ const ContractorDashboard = ({ user, onLogout }) => {
                       height={220}
                       style={{ borderRadius: 16 }}
                     />
-
-                    {/* Interactive coordinate quick-select triggers */}
-                    <View style={styles.mapQuickSelectRow}>
-                      <TouchableOpacity
-                        style={styles.quickSelectBtn}
-                        onPress={() => {
-                          setLatitude('40.7527');
-                          setLongitude('-73.9772');
-                          setAddress('Grand Central Office Complex, 89 E 42nd St, NY');
-                        }}
-                      >
-                        <Text style={styles.quickSelectText}>Grand Central</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.quickSelectBtn}
-                        onPress={() => {
-                          setLatitude('40.7656');
-                          setLongitude('-73.9786');
-                          setAddress('Penthouse A, 150 Central Park South, NY');
-                        }}
-                      >
-                        <Text style={styles.quickSelectText}>Central Park</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.quickSelectBtn}
-                        onPress={() => {
-                          setLatitude('40.7128');
-                          setLongitude('-74.0060');
-                          setAddress('Downtown Office Complex, 123 Main St, NY');
-                        }}
-                      >
-                        <Text style={styles.quickSelectText}>Downtown</Text>
-                      </TouchableOpacity>
-                    </View>
                   </View>
 
-                  <CustomInput
-                    label="Manual Address"
-                    value={address}
-                    onChangeText={setAddress}
-                    placeholder="Enter full cleaning site address"
-                    icon="📍"
-                    required
-                  />
+                  {address ? (
+                    <View style={styles.selectedAddressContainer}>
+                      <Text style={styles.selectedAddressLabel}>Selected Address: 📍</Text>
+                      <Text style={styles.selectedAddressText}>{address}</Text>
+                    </View>
+                  ) : null}
 
 
 
@@ -2562,6 +2546,29 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     color: '#334155',
     fontWeight: '700'
+  },
+  selectedAddressContainer: {
+    backgroundColor: 'rgba(16, 185, 129, 0.04)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(16, 185, 129, 0.15)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    width: '100%'
+  },
+  selectedAddressLabel: {
+    fontSize: 11,
+    color: '#059669',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4
+  },
+  selectedAddressText: {
+    fontSize: 12.5,
+    color: '#1F2937',
+    fontWeight: '700',
+    lineHeight: 18
   }
 });
 
