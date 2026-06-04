@@ -1,54 +1,27 @@
 const GPSLog = require('../models/GPSLog');
 const Contract = require('../models/Contract');
 const WorkerAssignment = require('../models/WorkerAssignment');
+const { processGPSLocation } = require('../services/gpsService');
 
 // POST /api/gps/log - Worker logs GPS during active contract job
 exports.logGps = async (req, res) => {
   try {
-    const { contractId, lat, lng, workerStatus } = req.body;
+    const { contractId, lat, lng } = req.body;
 
     if (!contractId || lat === undefined || lng === undefined) {
       return res.status(400).json({ success: false, message: 'contractId, lat, and lng are required' });
     }
 
-    const assignment = await WorkerAssignment.findOne({
-      contractId,
-      workerId: req.user.id,
-      response: 'accepted'
-    });
-
-    if (!assignment) {
-      return res.status(403).json({
-        success: false,
-        message: 'GPS tracking is only enabled for accepted active contract assignments'
-      });
-    }
-
-    if (workerStatus) {
-      assignment.workerStatus = workerStatus;
-      await assignment.save();
-    }
-
-    const log = await GPSLog.create({
-      workerId: req.user.id,
-      contractId,
-      lat: parseFloat(lat),
-      lng: parseFloat(lng)
-    });
-
     const io = req.app.get('socketio');
-    if (io) {
-      io.to(`contract:${contractId}`).emit('worker_location', {
-        userId: req.user.id,
-        workerName: req.user.name,
-        lat: log.lat,
-        lng: log.lng,
-        workerStatus: assignment.workerStatus,
-        timestamp: log.timestamp
-      });
-    }
+    const result = await processGPSLocation(io, {
+      workerId: req.user.id,
+      workerName: req.user.name,
+      contractId,
+      lat,
+      lng
+    });
 
-    res.status(201).json({ success: true, log });
+    res.status(201).json({ success: true, log: result.log });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

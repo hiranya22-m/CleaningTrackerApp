@@ -485,6 +485,15 @@ const ActiveJobScreen = ({ route, navigation }) => {
         setGeofenceStatus(res.log.geofenceStatus);
         setDistanceVal(res.log.distanceToClient);
       }
+
+      // Also log location to GPSLog if there is an active accepted contract assignment
+      if (assignment) {
+        const contractId = assignment.contractId?._id || assignment.contractId;
+        if (contractId) {
+          const wStatus = status === 'started' ? 'Working' : 'Traveling';
+          await workerAPI.logGps(contractId, lat, lng, wStatus);
+        }
+      }
     } catch (error) {
       console.error('Error logging GPS coordinates:', error.message);
     }

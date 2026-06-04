@@ -15,7 +15,7 @@ import {
   BackHandler
 } from 'react-native';
 import { Colors } from '../../theme/colors';
-import { contractorAPI, getBaseUrl } from '../../api/client';
+import { contractorAPI, getBaseUrl, gpsAPI } from '../../api/client';
 import CustomInput from '../../components/CustomInput';
 import AppFooter from '../../components/AppFooter';
 import io from 'socket.io-client';
@@ -125,6 +125,83 @@ const ContractorDashboard = ({ user, onLogout }) => {
   };
 
   // ── Fetch Packages & Contracts ──────────────────────────────────────────────
+  const fetchGpsHistory = async (contractId, currentContract = selectedContractForMap) => {
+    if (!contractId) return;
+    try {
+      const res = await gpsAPI.getContractHistory(contractId);
+      if (res.success) {
+        const updatedLiveWorkers = {};
+        
+        res.assignments.forEach(assign => {
+          const workerId = assign.workerId?._id || assign.workerId;
+          if (!workerId) return;
+
+          // Find latest log for this worker in the logs history
+          const latestLog = res.logs.find(log => {
+            const logWorkerId = log.workerId?._id || log.workerId;
+            return logWorkerId && logWorkerId.toString() === workerId.toString();
+          });
+
+          // Calculate workedMinutes (like in socket handler)
+          let workedMins = assign.actualWorkedMinutes || 0;
+          if (assign.checkInTime && !assign.checkOutTime) {
+            const diffMs = new Date() - new Date(assign.checkInTime);
+            let totalMins = diffMs / 1000 / 60;
+            if (assign.outsideStartTime) {
+              const extraOutside = (new Date() - new Date(assign.outsideStartTime)) / 1000 / 60;
+              workedMins = totalMins - (assign.timeSpentOutsideMinutes || 0) - extraOutside;
+            } else {
+              workedMins = totalMins - (assign.timeSpentOutsideMinutes || 0);
+            }
+            workedMins = Math.max(0, Math.floor(workedMins));
+          }
+
+          // Calculate distance to client
+          let distanceToClient = 0;
+          let lat = currentContract?.location?.coordinates?.lat || NY_LAT;
+          let lng = currentContract?.location?.coordinates?.lng || NY_LNG;
+
+          if (latestLog) {
+            lat = latestLog.lat;
+            lng = latestLog.lng;
+            
+            // Haversine formula to client coords
+            const clientLat = currentContract?.location?.coordinates?.lat;
+            const clientLng = currentContract?.location?.coordinates?.lng;
+            if (clientLat !== undefined && clientLng !== undefined) {
+              const R = 6371000;
+              const phi1 = (clientLat * Math.PI) / 180;
+              const phi2 = (lat * Math.PI) / 180;
+              const deltaPhi = ((lat - clientLat) * Math.PI) / 180;
+              const deltaLambda = ((lng - clientLng) * Math.PI) / 180;
+              const a =
+                Math.sin(deltaPhi / 2) * Math.sin(deltaPhi / 2) +
+                Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLambda / 2) * Math.sin(deltaLambda / 2);
+              const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+              distanceToClient = Math.round(R * c);
+            }
+          }
+
+          updatedLiveWorkers[workerId.toString()] = {
+            lat,
+            lng,
+            timestamp: latestLog ? new Date(latestLog.timestamp) : null,
+            status: assign.workerStatus || 'Traveling',
+            distanceToClient,
+            totalViolations: assign.totalViolations || 0,
+            timeSpentOutsideMinutes: assign.timeSpentOutsideMinutes || 0,
+            workedMinutes: workedMins,
+            checkInTime: assign.checkInTime
+          };
+        });
+
+        setLiveWorkers(updatedLiveWorkers);
+      }
+    } catch (err) {
+      console.warn('Error fetching contract GPS history:', err.message);
+    }
+  };
+
   const loadInitialData = async () => {
     try {
       setRefreshing(true);
@@ -139,6 +216,16 @@ const ContractorDashboard = ({ user, onLogout }) => {
         const active = contractRes.contracts.find(c => c.status === 'active' || c.status === 'pending');
         if (active && !selectedContractForMap) {
           setSelectedContractForMap(active);
+          fetchGpsHistory(active._id, active);
+        } else if (selectedContractForMap) {
+          // Refresh coordinates/status for the already selected contract
+          const updatedSelected = contractRes.contracts.find(c => c._id === selectedContractForMap._id);
+          if (updatedSelected) {
+            setSelectedContractForMap(updatedSelected);
+            fetchGpsHistory(updatedSelected._id, updatedSelected);
+          } else {
+            fetchGpsHistory(selectedContractForMap._id);
+          }
         }
       }
       setRefreshing(false);
@@ -151,6 +238,12 @@ const ContractorDashboard = ({ user, onLogout }) => {
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    if (selectedContractForMap) {
+      fetchGpsHistory(selectedContractForMap._id);
+    }
+  }, [selectedContractForMap]);
 
   // ── Auto-resolve Contractor's Current Location ──
   useEffect(() => {

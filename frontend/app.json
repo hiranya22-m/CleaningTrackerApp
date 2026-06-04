@@ -23,7 +23,7 @@
     "extra": {
       "apiUrl": "https://cleaningtrackerapp-production.up.railway.app",
       "eas": {
-        "projectId": "4d6e3d9b-3c3d-41d0-8cba-9d68763acba4"
+        "projectId": "10546914-f55d-4db9-880c-ae2edfcc888d"
       }
     },
     "plugins": [
@@ -35,6 +35,7 @@
           }
         }
       ]
-    ]
+    ],
+    "owner": "abeywi"
   }
 }

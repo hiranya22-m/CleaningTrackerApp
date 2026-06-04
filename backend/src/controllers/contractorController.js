@@ -251,6 +251,13 @@ exports.getContracts = async (req, res) => {
           workerId: a.workerId,
           response: a.response,
           responseDeadline: a.responseDeadline,
+          workerStatus: a.workerStatus,
+          checkInTime: a.checkInTime,
+          checkOutTime: a.checkOutTime,
+          actualWorkedMinutes: a.actualWorkedMinutes,
+          totalViolations: a.totalViolations,
+          timeSpentOutsideMinutes: a.timeSpentOutsideMinutes,
+          gpsAttendanceSummary: a.gpsAttendanceSummary,
           createdAt: a.createdAt
         }))
       });
