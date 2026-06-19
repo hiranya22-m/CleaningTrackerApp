@@ -18,7 +18,7 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
   const [step, setStep] = useState(1); // 1: Enter details/Email, 2: Enter OTP
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [timer, setTimer] = useState(300); // 5 minutes countdown
+  const [timer, setTimer] = useState(300); // 10 minutes countdown
   const [resendCooldown, setResendCooldown] = useState(0);
   const [errors, setErrors] = useState({});
 
@@ -151,7 +151,7 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
         }
 
         setStep(2);
-        setTimer(300); // Reset countdown to 5 mins
+        setTimer(300); // Reset countdown to 10 mins
         setResendCooldown(60); // 1-minute resend cooldown
         if (res.devOtpCode) {
           setOtpCode(res.devOtpCode);

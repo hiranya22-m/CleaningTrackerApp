@@ -356,3 +356,201 @@ exports.endAssignmentJob = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+/**
+ * @desc    Get open freelance jobs matching worker capabilities and state
+ * @route   GET /api/worker/freelance
+ * @access  Private/Worker
+ */
+exports.getFreelanceJobsForWorker = async (req, res) => {
+  try {
+    const FreelanceJob = require('../models/FreelanceJob');
+    const capabilities = req.user.tags || [];
+    const state = req.user.state || '';
+
+    const filter = {
+      status: 'open',
+      $or: [
+        {
+          targetType: 'public',
+          ...(capabilities.length > 0 ? { category: { $in: capabilities } } : {}),
+          ...(state ? { location: { $regex: state, $options: 'i' } } : {})
+        },
+        {
+          targetType: 'crew',
+          contractor: req.user.contractorId
+        }
+      ]
+    };
+
+    const freelanceJobs = await FreelanceJob.find(filter)
+      .populate('contractor', 'name companyName email phoneNumber')
+      .sort('-createdAt');
+
+    res.status(200).json({ success: true, count: freelanceJobs.length, freelanceJobs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * @desc    Apply/request for a freelance job opening
+ * @route   POST /api/worker/freelance/:id/apply
+ * @access  Private/Worker
+ */
+exports.applyForFreelanceJob = async (req, res) => {
+  try {
+    const FreelanceJob = require('../models/FreelanceJob');
+    const freelanceJob = await FreelanceJob.findById(req.params.id);
+
+    if (!freelanceJob) {
+      return res.status(404).json({ success: false, message: 'Freelance job not found' });
+    }
+
+    if (freelanceJob.status !== 'open') {
+      return res.status(400).json({ success: false, message: 'Freelance job is no longer open for applications' });
+    }
+
+    if (freelanceJob.targetType === 'crew') {
+      // Direct acceptance flow: worker accepts a crew shift
+      freelanceJob.approvedWorker = req.user.id;
+      freelanceJob.status = 'filled';
+      await freelanceJob.save();
+
+      const Package = require('../models/Package');
+      const Contract = require('../models/Contract');
+      const WorkerAssignment = require('../models/WorkerAssignment');
+      const Job = require('../models/Job');
+      const User = require('../models/User');
+
+      const contractorUser = await User.findById(freelanceJob.contractor);
+      let packageId = contractorUser ? contractorUser.packageId : null;
+      if (!packageId) {
+        const basicPkg = await Package.findOne({ name: 'Basic' });
+        if (basicPkg) packageId = basicPkg._id;
+      }
+
+      // Automatically associate the worker to this contractor if not already done
+      if (!req.user.contractorId || req.user.contractorId.toString() !== freelanceJob.contractor.toString()) {
+        await User.findByIdAndUpdate(req.user.id, { contractorId: freelanceJob.contractor });
+      }
+
+      const contract = await Contract.create({
+        contractorId: freelanceJob.contractor,
+        clientName: `Freelance Job: ${freelanceJob.category}`,
+        location: {
+          address: freelanceJob.location,
+          coordinates: {
+            lat: 40.7128,
+            lng: -73.9786
+          }
+        },
+        packageId,
+        workers: [req.user.id],
+        requiredWorkersCount: 1,
+        isUrgent: false,
+        schedule: {
+          date: freelanceJob.date,
+          startTime: freelanceJob.time,
+          durationMinutes: Math.round(freelanceJob.hours * 60)
+        },
+        notes: freelanceJob.description,
+        status: 'active'
+      });
+
+      const responseDeadline = new Date(Date.now() + 120 * 60 * 1000);
+      await WorkerAssignment.create({
+        contractId: contract._id,
+        workerId: req.user.id,
+        response: 'accepted',
+        workerStatus: 'Traveling',
+        responseDeadline
+      });
+
+      const baseDate = new Date(contract.schedule.date);
+      const [hours, minutes] = (contract.schedule.startTime || '09:00').split(':');
+      baseDate.setHours(parseInt(hours, 10) || 9);
+      baseDate.setMinutes(parseInt(minutes, 10) || 0);
+
+      await Job.create({
+        customerName: contract.clientName,
+        address: contract.location.address,
+        latitude: contract.location.coordinates.lat,
+        longitude: contract.location.coordinates.lng,
+        assignedWorker: req.user.id,
+        contractor: freelanceJob.contractor,
+        startTime: baseDate,
+        expectedHours: freelanceJob.hours,
+        notes: contract.notes,
+        status: 'pending'
+      });
+
+      return res.status(200).json({ success: true, message: 'Successfully accepted the crew freelance job!', freelanceJob, contract });
+    }
+
+    // Public shift: normal application flow
+    if (freelanceJob.applicants.includes(req.user.id)) {
+      return res.status(400).json({ success: false, message: 'You have already applied for this job' });
+    }
+
+    freelanceJob.applicants.push(req.user.id);
+    await freelanceJob.save();
+
+    res.status(200).json({ success: true, message: 'Successfully applied for the freelance job!', freelanceJob });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * @desc    Get contractors worker has worked with or is associated with
+ * @route   GET /api/worker/contractors
+ * @access  Private/Worker
+ */
+exports.getAssociatedContractors = async (req, res) => {
+  try {
+    const contractorIds = new Set();
+    if (req.user.contractorId) {
+      contractorIds.add(req.user.contractorId.toString());
+    }
+
+    const assignments = await WorkerAssignment.find({ workerId: req.user.id })
+      .populate({
+        path: 'contractId',
+        select: 'contractorId'
+      });
+
+    assignments.forEach(assign => {
+      if (assign.contractId && assign.contractId.contractorId) {
+        contractorIds.add(assign.contractId.contractorId.toString());
+      }
+    });
+
+    const contractors = await User.find({ _id: { $in: Array.from(contractorIds) } }).select('name companyName email phoneNumber tags locations');
+
+    res.status(200).json({ success: true, count: contractors.length, contractors });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * @desc    Get projects/shifts for a specific contractor
+ * @route   GET /api/worker/contractors/:id/projects
+ * @access  Private/Worker
+ */
+exports.getContractorProjectsForWorker = async (req, res) => {
+  try {
+    const contractorId = req.params.id;
+    const Job = require('../models/Job');
+
+    const jobs = await Job.find({
+      assignedWorker: req.user.id,
+      contractor: contractorId
+    }).sort('-startTime');
+
+    res.status(200).json({ success: true, count: jobs.length, jobs });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

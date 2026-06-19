@@ -32,7 +32,7 @@ const AppFooter = ({ navigation }) => {
       <View style={styles.grid}>
         {/* Brand Information Column */}
         <View style={styles.brandCol}>
-          <Text style={styles.brandName}>CleanTrack</Text>
+          <Text style={styles.brandName}>CrewLynk</Text>
           <Text style={styles.brandDesc}>
             Premium workforce management. Track GPS shifts, dispatch cleaning jobs, and streamline contractor ops.
           </Text>
@@ -40,7 +40,7 @@ const AppFooter = ({ navigation }) => {
             <TouchableOpacity style={styles.socialBtn} onPress={() => handleLink('https://facebook.com')}>
               <Text style={styles.socialIcon}>f</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.socialBtn} onPress={() => handleLink('mailto:support@cleantrack.com')}>
+            <TouchableOpacity style={styles.socialBtn} onPress={() => handleLink('mailto:support@crewlynk.com')}>
               <Text style={styles.socialIcon}>✉</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.socialBtn} onPress={() => handleLink('https://wa.me/94775955996')}>
@@ -56,10 +56,13 @@ const AppFooter = ({ navigation }) => {
             <Text style={styles.link}>Admin Station</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => goToLogin('worker')} activeOpacity={0.7}>
-            <Text style={styles.link}>Worker Portal</Text>
+            <Text style={styles.link}>Crew Member Portal</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => goToLogin('contractor')} activeOpacity={0.7}>
             <Text style={styles.link}>Contractor Portal</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => goToLogin('client')} activeOpacity={0.7}>
+            <Text style={styles.link}>Client Portal</Text>
           </TouchableOpacity>
         </View>
 
@@ -77,8 +80,8 @@ const AppFooter = ({ navigation }) => {
           <Text style={styles.colTitle}>Support</Text>
           <Text style={styles.passiveLink}>Ops Help Center</Text>
           <Text style={styles.passiveLink}>24/7 Dedicated</Text>
-          <TouchableOpacity onPress={() => handleLink('mailto:support@cleantrack.com')} activeOpacity={0.7}>
-            <Text style={styles.supportEmailLink}>support@cleantrack.com</Text>
+          <TouchableOpacity onPress={() => handleLink('mailto:support@crewlynk.com')} activeOpacity={0.7}>
+            <Text style={styles.supportEmailLink}>support@crewlynk.com</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -86,7 +89,7 @@ const AppFooter = ({ navigation }) => {
       <View style={styles.divider} />
 
       <Text style={styles.copyright}>
-        © 2026 CleanTrack (CrewLynk) Platform. All rights reserved.
+        © 2026 CrewLynk Platform. All rights reserved.
       </Text>
     </View>
   );

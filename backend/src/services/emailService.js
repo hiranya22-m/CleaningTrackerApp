@@ -57,21 +57,21 @@ const buildOtpEmailContent = (otpCode, role, isLogin) => {
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 560px; margin: 0 auto;">
       <div style="background: linear-gradient(135deg, #1E40AF, #0EA5E9); padding: 28px; text-align: center; border-radius: 12px 12px 0 0;">
-        <h1 style="color: #fff; margin: 0; font-size: 20px;">CleanTrack Verification</h1>
+        <h1 style="color: #fff; margin: 0; font-size: 20px;">CrewLynk Verification</h1>
         <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0; font-size: 13px;">${roleLabel} ${actionLabel}</p>
       </div>
       <div style="background: #f8fafc; padding: 28px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
         <p style="color: #334155; font-size: 14px;">Your one-time verification code is:</p>
         <p style="text-align: center; font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #1E40AF; margin: 20px 0;">${otpCode}</p>
-        <p style="color: #64748b; font-size: 13px;">Expires in 5 minutes. Do not share this code.</p>
+        <p style="color: #64748b; font-size: 13px;">Expires in 10 minutes. Do not share this code.</p>
       </div>
     </div>
   `;
 
-  const text = `Your CleanTrack verification code is ${otpCode}. It expires in 5 minutes.`;
+  const text = `Your CrewLynk verification code is ${otpCode}. It expires in 10 minutes.`;
 
   return {
-    subject: `${otpCode} is your CleanTrack verification code`,
+    subject: `${otpCode} is your CrewLynk verification code`,
     html,
     text
   };
@@ -79,7 +79,7 @@ const buildOtpEmailContent = (otpCode, role, isLogin) => {
 
 const sendViaResend = async (to, otpCode, role, isLogin) => {
   const apiKey = process.env.RESEND_API_KEY.trim();
-  const from = (process.env.RESEND_FROM || 'CleanTrack <onboarding@resend.dev>').trim();
+  const from = (process.env.RESEND_FROM || 'CrewLynk <onboarding@resend.dev>').trim();
   const { subject, html, text } = buildOtpEmailContent(otpCode, role, isLogin);
 
   const controller = new AbortController();
@@ -140,13 +140,14 @@ const getSmtpTransporter = async () => {
   const { user, pass } = getSmtpCredentials();
 
   const host = env.smtpHost || 'smtp.gmail.com';
-  const port = env.smtpPort || 465;
+  const port = env.smtpPort || 587;
   const secure = port === 465;
 
   smtpTransporter = nodemailer.createTransport({
     host,
     port,
     secure,
+    requireTLS: !secure,
     auth: { user, pass },
     connectionTimeout: SMTP_CONNECT_TIMEOUT_MS,
     socketTimeout: SMTP_SOCKET_TIMEOUT_MS,
@@ -162,7 +163,7 @@ const sendViaGmail = async (to, otpCode, role, isLogin) => {
   const transporter = await getSmtpTransporter();
   const { user } = getSmtpCredentials();
   const fromEmail = (env.smtpFromEmail || user).trim();
-  const fromName = env.smtpFromName || 'CleanTrack';
+  const fromName = env.smtpFromName || 'CrewLynk';
   const { subject, html, text } = buildOtpEmailContent(otpCode, role, isLogin);
 
   const info = await transporter.sendMail({
@@ -266,9 +267,9 @@ exports.sendWelcomeEmail = async (user) => {
     const transporter = await getSmtpTransporter();
     const { user: smtpUser } = getSmtpCredentials();
     await transporter.sendMail({
-      from: `"CleanTrack" <${env.smtpFromEmail || smtpUser}>`,
+      from: `"CrewLynk" <${env.smtpFromEmail || smtpUser}>`,
       to: user.email,
-      subject: 'Welcome to CleanTrack',
+      subject: 'Welcome to CrewLynk',
       text: `Hello ${user.name}, your account is ready.`
     });
   } catch (e) {

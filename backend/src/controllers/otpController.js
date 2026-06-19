@@ -27,7 +27,7 @@ const generate6DigitCode = () => {
  */
 exports.requestOtp = async (req, res) => {
   try {
-    const { email, role, name, phoneNumber, companyName } = req.body;
+    const { email, role, name, phoneNumber, companyName, tags, locations, state, hourlyRate } = req.body;
 
     // --- Basic validation ---
     if (!email) {
@@ -40,7 +40,7 @@ exports.requestOtp = async (req, res) => {
     }
 
     // Normalise role — legacy contractor routes don't send role in body
-    let requestedRole = (role === 'worker' || role === 'contractor')
+    let requestedRole = (role === 'worker' || role === 'contractor' || role === 'client')
       ? role
       : 'contractor'; // default for legacy contractor routes
 
@@ -123,8 +123,8 @@ exports.requestOtp = async (req, res) => {
     const isLogin = !!existingUser;
     let emailResult;
 
-    if (process.env.ALLOW_TEST_OTP === 'true') {
-      console.log(`[TEST MODE OTP] Email bypassed (ALLOW_TEST_OTP is enabled). Verification Code is: ${rawOtp}`);
+    if (process.env.ALLOW_TEST_OTP === 'true' && process.env.NODE_ENV !== 'production') {
+      console.log(`[TEST MODE OTP] Email bypassed. Verification Code is: ${rawOtp}`);
       emailResult = { to: cleanEmail };
     } else {
       try {
@@ -139,12 +139,19 @@ exports.requestOtp = async (req, res) => {
       }
     }
 
-    res.status(200).json({
+    const payload = {
       success: true,
       message: `A 6-digit verification code has been sent to ${cleanEmail}. Please check your inbox and spam folder.`,
       isNewUser: !existingUser,
       sentTo: emailResult.to
-    });
+    };
+
+    if (process.env.ALLOW_TEST_OTP === 'true' && process.env.NODE_ENV !== 'production') {
+      payload.devOtpCode = rawOtp;
+      payload.message = `Development mode: use code ${rawOtp} (email bypass enabled).`;
+    }
+
+    res.status(200).json(payload);
   } catch (error) {
     console.error('Request OTP Error:', error);
     res.status(500).json({ success: false, message: error.message || 'Server error generating OTP' });
@@ -159,7 +166,7 @@ exports.requestOtp = async (req, res) => {
  */
 exports.verifyOtp = async (req, res) => {
   try {
-    const { email, role, name, phoneNumber, companyName } = req.body;
+    const { email, role, name, phoneNumber, companyName, tags, locations, state, hourlyRate } = req.body;
     const code = req.body.code ? String(req.body.code).trim() : '';
 
     if (!email || !code) {
@@ -231,13 +238,33 @@ exports.verifyOtp = async (req, res) => {
         return res.status(400).json({ success: false, message: 'Company Name is required to complete contractor registration' });
       }
 
+      // Parse arrays/strings for tags and locations
+      const parsedTags = Array.isArray(tags) ? tags : (typeof tags === 'string' ? tags.split(',').map(t => t.trim()).filter(Boolean) : []);
+      const parsedLocations = Array.isArray(locations) ? locations : (typeof locations === 'string' ? locations.split(',').map(l => l.trim()).filter(Boolean) : []);
+
       user = await User.create({
         name: name.trim(),
         email: cleanEmail,
         phoneNumber,
-        ...(effectiveRole === 'contractor' && { companyName: companyName.trim() }),
-        role: effectiveRole
+        role: effectiveRole,
+        companyName: effectiveRole === 'contractor' ? (companyName ? companyName.trim() : '') : undefined,
+        tags: (effectiveRole === 'contractor' || effectiveRole === 'worker') ? parsedTags : undefined,
+        locations: effectiveRole === 'contractor' ? parsedLocations : undefined,
+        state: (effectiveRole === 'worker' || effectiveRole === 'client') ? (state ? state.trim() : '') : undefined,
+        hourlyRate: effectiveRole === 'worker' ? (parseFloat(hourlyRate) || 25) : undefined
       });
+
+      // Contractor plans are chosen on first login/onboarding rather than auto-assigned on registration
+      /*
+      if (effectiveRole === 'contractor') {
+        const Package = require('../models/Package');
+        const subscriptionService = require('../services/subscriptionService');
+        const defaultPkg = await Package.findOne({ name: 'Basic' });
+        if (defaultPkg) {
+          await subscriptionService.initializeSubscription(user, defaultPkg);
+        }
+      }
+      */
 
       isNewUser = true;
 
@@ -256,9 +283,15 @@ exports.verifyOtp = async (req, res) => {
         name: user.name,
         email: user.email,
         phoneNumber: user.phoneNumber,
-        ...(user.companyName && { companyName: user.companyName }),
         role: user.role,
-        status: user.status
+        status: user.status,
+        companyName: user.companyName,
+        tags: user.tags,
+        locations: user.locations,
+        state: user.state,
+        hourlyRate: user.hourlyRate,
+        packageId: user.packageId,
+        workerIdNumber: user.workerIdNumber
       }
     });
   } catch (error) {

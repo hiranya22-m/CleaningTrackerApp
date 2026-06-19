@@ -67,6 +67,7 @@ const workerRoutes = require('./routes/worker');
 const adminRoutes = require('./routes/admin');
 const gpsRoutes = require('./routes/gps');
 const { processExpiredAssignments } = require('./services/assignmentExpiryService');
+const { processSubscriptionRenewals } = require('./services/subscriptionService');
 
 // Mount REST Routes
 app.use('/api/auth', authRoutes);
@@ -101,6 +102,18 @@ setInterval(async () => {
     console.error('Assignment expiry job error:', err.message);
   }
 }, 60 * 1000);
+
+// Auto-renew contractor plans daily (charge another month if auto-renew is on)
+setInterval(async () => {
+  try {
+    const result = await processSubscriptionRenewals();
+    if (result.renewed > 0 || result.expired > 0) {
+      console.log(`Subscriptions processed — renewed: ${result.renewed}, expired: ${result.expired}`);
+    }
+  } catch (err) {
+    console.error('Subscription renewal job error:', err.message);
+  }
+}, 60 * 60 * 1000);
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err, promise) => {

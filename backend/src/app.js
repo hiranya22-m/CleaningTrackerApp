@@ -22,12 +22,14 @@ app.use(morgan('dev'));
 // Import routes
 const authRoutes = require('./routes/auth');
 const contractorRoutes = require('./routes/contractor');
+const clientRoutes = require('./routes/client');
 const adminRoutes = require('./routes/admin');
 const workerRoutes = require('./routes/worker');
 const gpsRoutes = require('./routes/gps');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/contractor', contractorRoutes);
+app.use('/api/client', clientRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/worker', workerRoutes);
 app.use('/api/gps', gpsRoutes);

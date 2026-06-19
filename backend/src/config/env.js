@@ -10,7 +10,7 @@ module.exports = {
   smtpPort: parseInt(process.env.SMTP_PORT, 10) || 587,
   smtpUser: process.env.SMTP_USER,
   smtpPass: process.env.SMTP_PASS,
-  smtpFromName: process.env.SMTP_FROM_NAME || 'CleanTrack',
+  smtpFromName: process.env.SMTP_FROM_NAME || 'CrewLynk',
   smtpFromEmail: process.env.SMTP_FROM_EMAIL,
   googleMapsKey: process.env.GOOGLE_MAPS_KEY,
   otpExpiryMinutes: parseInt(process.env.OTP_EXPIRY_MINUTES, 10) || 5,

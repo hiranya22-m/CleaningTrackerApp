@@ -10,7 +10,7 @@ const OTPVerificationSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['worker', 'contractor'],
+    enum: ['worker', 'contractor', 'client'],
     required: [true, 'Role is required']
   },
   codeHash: {

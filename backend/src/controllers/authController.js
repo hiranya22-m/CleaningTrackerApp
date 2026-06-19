@@ -56,7 +56,8 @@ exports.login = async (req, res) => {
         email: user.email,
         phoneNumber: user.phoneNumber,
         role: user.role,
-        status: user.status
+        status: user.status,
+        workerIdNumber: user.workerIdNumber
       }
     });
   } catch (error) {
@@ -71,7 +72,7 @@ exports.login = async (req, res) => {
  */
 exports.getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.id).populate('packageId');
     res.status(200).json({ success: true, user });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

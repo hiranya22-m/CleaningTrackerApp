@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { TouchableOpacity, Text, ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Colors } from '../theme/colors';
 
 const CustomButton = ({
@@ -47,6 +47,21 @@ const CustomButton = ({
       disabled={disabled || loading}
       {...props}
     >
+      {/* Glossy top highlight overlay */}
+      {!disabled && type !== 'outline' && (
+        <View
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 1.5,
+            backgroundColor: 'rgba(255, 255, 255, 0.45)',
+            borderTopLeftRadius: 10,
+            borderTopRightRadius: 10
+          }}
+        />
+      )}
       {loading ? (
         <ActivityIndicator color={type === 'outline' ? Colors.secondary : Colors.white} size="small" />
       ) : (
@@ -64,10 +79,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     width: '100%',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 5,
-    elevation: 2
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18, // Glowing shiny shadow
+    shadowRadius: 8, // Softer spread
+    elevation: 3,
+    position: 'relative',
+    overflow: 'hidden'
   },
   primary: {
     backgroundColor: Colors.primary, // SaaS Green

@@ -27,6 +27,7 @@ const CustomInput = ({
   isPhoneInput = false,
   countryCode = '+94',
   onCountryCodeChange,
+  onPress,
   ...props
 }) => {
   const [isFocused, setIsFocused] = useState(false);
@@ -37,6 +38,9 @@ const CustomInput = ({
   const shouldBeSecure = secureTextEntry && !isSecureVisible;
   const selectedCountry = COUNTRIES.find((c) => c.code === countryCode) || COUNTRIES[0];
 
+  const ContainerComponent = onPress ? TouchableOpacity : TouchableWithoutFeedback;
+  const containerPressHandler = onPress ? onPress : () => inputRef.current?.focus();
+
   return (
     <View style={styles.container}>
       {label ? (
@@ -45,7 +49,7 @@ const CustomInput = ({
         </Text>
       ) : null}
       
-      <TouchableWithoutFeedback onPress={() => inputRef.current?.focus()}>
+      <ContainerComponent onPress={containerPressHandler} {...(onPress ? { activeOpacity: 0.7 } : {})}>
         <View
           style={[
             styles.inputContainer,
@@ -66,23 +70,42 @@ const CustomInput = ({
             <Text style={styles.prefixIcon}>{icon}</Text>
           ) : null}
           
-          <TextInput
-            ref={inputRef}
-            style={styles.input}
-            value={value}
-            onChangeText={onChangeText}
-            placeholder={placeholder}
-            placeholderTextColor="#94A3B8"
-            secureTextEntry={shouldBeSecure}
-            keyboardType={keyboardType}
-            autoCapitalize={autoCapitalize}
-            autoComplete="off"
-            autoCorrect={false}
-            spellCheck={false}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            {...props}
-          />
+          {onPress ? (
+            <Text
+              style={[
+                styles.input,
+                !value ? { color: '#94A3B8' } : null,
+                { textAlignVertical: 'center', includeFontPadding: false }
+              ]}
+              numberOfLines={1}
+            >
+              {value || placeholder}
+            </Text>
+          ) : (
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              value={value}
+              onChangeText={onChangeText}
+              placeholder={placeholder}
+              placeholderTextColor="#94A3B8"
+              secureTextEntry={shouldBeSecure}
+              keyboardType={keyboardType}
+              autoCapitalize={autoCapitalize}
+              autoComplete="off"
+              autoCorrect={false}
+              spellCheck={false}
+              onFocus={(e) => {
+                setIsFocused(true);
+                if (props.onFocus) props.onFocus(e);
+              }}
+              onBlur={(e) => {
+                setIsFocused(false);
+                if (props.onBlur) props.onBlur(e);
+              }}
+              {...props}
+            />
+          )}
 
           {secureTextEntry ? (
             <TouchableOpacity
@@ -94,7 +117,7 @@ const CustomInput = ({
             </TouchableOpacity>
           ) : null}
         </View>
-      </TouchableWithoutFeedback>
+      </ContainerComponent>
       
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 

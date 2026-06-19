@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal } from 'react-native';
+import backScrollEmitter from '../../utils/backScrollEmitter';
 import { Colors } from '../../theme/colors';
 import CustomInput from '../../components/CustomInput';
 import CustomButton from '../../components/CustomButton';
@@ -14,6 +15,24 @@ const AssignJobScreen = ({ onJobCreated }) => {
   const [expectedHours, setExpectedHours] = useState('2.5');
   const [assignedWorker, setAssignedWorker] = useState('');
   const [notes, setNotes] = useState('');
+  const [jobDate, setJobDate] = useState(new Date().toISOString().slice(0, 10));
+  const [jobTime, setJobTime] = useState('09:00');
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    const listener = (markHandled) => {
+      try {
+        if (scrollRef.current && scrollRef.current.scrollTo) {
+          scrollRef.current.scrollTo({ y: 0, animated: true });
+          markHandled();
+        }
+      } catch (e) {}
+    };
+    const unsub = backScrollEmitter.subscribe(listener);
+    return () => unsub();
+  }, []);
   
   const [workers, setWorkers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -40,7 +59,7 @@ const AssignJobScreen = ({ onJobCreated }) => {
   }, []);
 
   const handleCreateJob = async () => {
-    if (!customerName || !address || latitude === undefined || longitude === undefined || !assignedWorker) {
+    if (!customerName || !address || latitude === undefined || longitude === undefined || !assignedWorker || !jobDate || !jobTime) {
       Alert.alert('Missing Fields', 'Please complete all required fields and select a worker.');
       return;
     }
@@ -55,7 +74,7 @@ const AssignJobScreen = ({ onJobCreated }) => {
         geofenceRadius: parseInt(radius) || 200,
         expectedHours: parseFloat(expectedHours) || 2,
         assignedWorker,
-        startTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // scheduled 2 hours from now
+        startTime: new Date(`${jobDate}T${jobTime}:00`).toISOString(),
         notes
       };
 
@@ -110,8 +129,22 @@ const AssignJobScreen = ({ onJobCreated }) => {
     }
   };
 
+    const getDaysInMonth = (date) => {
+      const year = date.getFullYear();
+      const month = date.getMonth();
+      const firstDay = new Date(year, month, 1);
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const startDay = firstDay.getDay();
+      const days = [];
+      for (let i = 0; i < startDay; i += 1) days.push(null);
+      for (let i = 1; i <= daysInMonth; i += 1) {
+        days.push(new Date(year, month, i));
+      }
+      return days;
+    };
+
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView ref={scrollRef} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.card}>
         <Text style={styles.cardTitle}>Create & Assign Job</Text>
 
@@ -191,8 +224,34 @@ const AssignJobScreen = ({ onJobCreated }) => {
           </View>
         </View>
 
+        <View style={styles.doubleRow}>
+          <View style={styles.halfWidth}>
+            <CustomInput
+              label="Scheduled Date"
+              value={jobDate}
+              placeholder="Select Date"
+              icon="📅"
+              required
+              onPress={() => {
+                setCurrentCalendarMonth(jobDate ? new Date(jobDate) : new Date());
+                setShowCalendarModal(true);
+              }}
+            />
+          </View>
+          <View style={styles.halfWidth}>
+            <CustomInput
+              label="Start Time"
+              value={jobTime}
+              onChangeText={setJobTime}
+              placeholder="09:00"
+              keyboardType="numeric"
+              required
+            />
+          </View>
+        </View>
+
         <View style={styles.fieldGroup}>
-          <Text style={styles.dropdownLabel}>Assign Cleaning Crew *</Text>
+          <Text style={styles.dropdownLabel}>Assign Crew *</Text>
           <View style={styles.pickerContainer}>
             {loadingWorkers ? (
               <Text style={styles.pickerPlaceholder}>Loading crew list...</Text>
@@ -240,6 +299,68 @@ const AssignJobScreen = ({ onJobCreated }) => {
           style={{ marginTop: 8 }}
         />
       </View>
+
+      <Modal
+        visible={showCalendarModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCalendarModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.calendarContainer}>
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity
+                style={styles.calendarNavBtn}
+                onPress={() => setCurrentCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+              >
+                <Text style={styles.calendarNavText}>◀</Text>
+              </TouchableOpacity>
+              <Text style={styles.calendarHeaderTitle}>
+                {currentCalendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+              </Text>
+              <TouchableOpacity
+                style={styles.calendarNavBtn}
+                onPress={() => setCurrentCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+              >
+                <Text style={styles.calendarNavText}>▶</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.weekRow}>
+              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((label) => (
+                <Text key={label} style={styles.weekDayText}>{label}</Text>
+              ))}
+            </View>
+            <View style={styles.daysGrid}>
+              {getDaysInMonth(currentCalendarMonth).map((day, index) => {
+                if (!day) return <View key={`empty-${index}`} style={styles.dayCellEmpty} />;
+                const yyyy = day.getFullYear();
+                const mm = String(day.getMonth() + 1).padStart(2, '0');
+                const dd = String(day.getDate()).padStart(2, '0');
+                const dateString = `${yyyy}-${mm}-${dd}`;
+                const selected = dateString === jobDate;
+                const isToday = day.toDateString() === new Date().toDateString();
+                return (
+                  <TouchableOpacity
+                    key={dateString}
+                    style={[styles.dayCell, selected && styles.dayCellSelected, isToday && !selected && styles.dayCellToday]}
+                    onPress={() => {
+                      setJobDate(dateString);
+                      setShowCalendarModal(false);
+                    }}
+                  >
+                    <Text style={[styles.dayText, selected && styles.dayTextSelected, isToday && !selected && styles.dayTextToday]}>
+                      {day.getDate()}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity style={styles.calendarCloseBtn} onPress={() => setShowCalendarModal(false)}>
+              <Text style={styles.calendarCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 };
@@ -347,6 +468,108 @@ const styles = StyleSheet.create({
   },
   pickerItemTextActive: {
     color: Colors.primary, // Green text
+    fontWeight: '800'
+  }
+  ,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24
+  },
+  calendarContainer: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#fff',
+    borderRadius: 24,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16
+  },
+  calendarNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F8FAFC',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  calendarNavText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A'
+  },
+  calendarHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A'
+  },
+  weekRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10
+  },
+  weekDayText: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B'
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between'
+  },
+  dayCellEmpty: {
+    width: 36,
+    height: 36,
+    marginBottom: 8
+  },
+  dayCell: {
+    width: 36,
+    height: 36,
+    marginBottom: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 18,
+    backgroundColor: '#F8FAFC'
+  },
+  dayCellSelected: {
+    backgroundColor: Colors.primary,
+  },
+  dayCellToday: {
+    borderWidth: 1.5,
+    borderColor: Colors.secondary
+  },
+  dayText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0F172A'
+  },
+  dayTextSelected: {
+    color: '#fff'
+  },
+  dayTextToday: {
+    color: Colors.secondary,
+    fontWeight: '800'
+  },
+  calendarCloseBtn: {
+    marginTop: 16,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: 'center'
+  },
+  calendarCloseText: {
+    color: '#0F172A',
     fontWeight: '800'
   }
 });

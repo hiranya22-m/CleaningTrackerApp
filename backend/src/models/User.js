@@ -32,17 +32,68 @@ const UserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'worker', 'contractor'],
+    enum: ['admin', 'worker', 'contractor', 'client'],
     default: 'worker'
   },
   companyName: {
     type: String
     // Only for contractors
   },
+  tags: {
+    type: [String],
+    default: []
+  },
+  locations: {
+    type: [String],
+    default: []
+  },
+  state: {
+    type: String
+  },
+  packageId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Package'
+  },
+  contractorId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  hourlyRate: {
+    type: Number,
+    default: 25
+  },
   status: {
     type: String,
     enum: ['offline', 'active_shift', 'cleaning', 'available', 'busy', 'on_job'],
     default: 'offline'
+  },
+  workerIdNumber: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  planExpiresAt: {
+    type: Date
+  },
+  planAutoRenew: {
+    type: Boolean,
+    default: true
+  },
+  planStatus: {
+    type: String,
+    enum: ['active', 'expired', 'cancelled'],
+    default: 'active'
+  },
+  earlySelectCharge: {
+    type: Number,
+    default: 0
+  },
+  lastBilledAt: {
+    type: Date
+  },
+  planTotalBilled: {
+    type: Number,
+    default: 0
   },
   createdAt: {
     type: Date,
@@ -52,6 +103,25 @@ const UserSchema = new mongoose.Schema({
 
 // Pre-save: enforce single admin limit + hash password if provided
 UserSchema.pre('save', async function (next) {
+  // Generate a unique workerIdNumber for crew members
+  if (this.isNew && this.role === 'worker' && !this.workerIdNumber) {
+    try {
+      let isUnique = false;
+      let candidateId = '';
+      while (!isUnique) {
+        const rand = Math.floor(100000 + Math.random() * 900000); // 6-digit number
+        candidateId = `CW-${rand}`;
+        const existing = await mongoose.model('User').findOne({ workerIdNumber: candidateId });
+        if (!existing) {
+          isUnique = true;
+        }
+      }
+      this.workerIdNumber = candidateId;
+    } catch (err) {
+      return next(err);
+    }
+  }
+
   // Enforce single admin account
   if (this.isNew && this.role === 'admin') {
     try {

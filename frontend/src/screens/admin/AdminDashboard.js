@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, RefreshControl, StyleSheet, Alert, TouchableOpacity, Modal, ActivityIndicator, Image } from 'react-native';
 import { Colors } from '../../theme/colors';
 import { adminAPI } from '../../api/client';
 import AppFooter from '../../components/AppFooter';
+import backScrollEmitter from '../../utils/backScrollEmitter';
 
 const AdminDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('home'); // 'home', 'contractors', 'workers', 'history'
@@ -60,6 +61,20 @@ const AdminDashboard = ({ user, onLogout }) => {
     loadAdminData();
   }, [activeTab]);
 
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    const listener = (markHandled) => {
+      try {
+        if (scrollRef.current && scrollRef.current.scrollTo) {
+          scrollRef.current.scrollTo({ y: 0, animated: true });
+          markHandled();
+        }
+      } catch (e) {}
+    };
+    const unsub = backScrollEmitter.subscribe(listener);
+    return () => unsub();
+  }, []);
+
   // View specific worker history
   const handleViewWorkerHistory = async (worker) => {
     setSelectedWorker(worker);
@@ -100,8 +115,10 @@ const AdminDashboard = ({ user, onLogout }) => {
 
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="always"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={loadAdminData} tintColor={Colors.primary} />
         }
@@ -182,7 +199,7 @@ const AdminDashboard = ({ user, onLogout }) => {
 
         {activeTab === 'workers' && (
           <View>
-            <Text style={styles.sectionTitle}>Cleaning Crew Registry</Text>
+            <Text style={styles.sectionTitle}>Crew Registry</Text>
             <Text style={styles.tipText}>💡 Tip: Click on a worker to inspect their Historical Cleaning logs and Decision sheets.</Text>
             {workers.length === 0 ? (
               <View style={styles.emptyCard}>
@@ -226,6 +243,7 @@ const AdminDashboard = ({ user, onLogout }) => {
         <TouchableOpacity
           style={styles.tabBarItem}
           activeOpacity={0.8}
+          hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
           onPress={() => setActiveTab('home')}
         >
           <Text style={[styles.tabBarIcon, activeTab === 'home' && styles.tabBarIconActive]}>🏠</Text>
@@ -236,6 +254,7 @@ const AdminDashboard = ({ user, onLogout }) => {
         <TouchableOpacity
           style={styles.tabBarItem}
           activeOpacity={0.8}
+          hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
           onPress={() => setActiveTab('contractors')}
         >
           <Text style={[styles.tabBarIcon, activeTab === 'contractors' && styles.tabBarIconActive]}>🏢</Text>
@@ -246,6 +265,7 @@ const AdminDashboard = ({ user, onLogout }) => {
         <TouchableOpacity
           style={styles.tabBarItem}
           activeOpacity={0.8}
+          hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
           onPress={() => setActiveTab('workers')}
         >
           <Text style={[styles.tabBarIcon, activeTab === 'workers' && styles.tabBarIconActive]}>👤</Text>
@@ -822,7 +842,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flex: 1,
     height: '100%',
-    paddingTop: 4
+    paddingTop: 4,
+    paddingVertical: 8
   },
   tabBarIcon: {
     fontSize: 20,

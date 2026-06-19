@@ -50,25 +50,26 @@ const resolveDevHost = () => {
 const getBackendUrl = () => {
   const productionUrl = getConfiguredProductionUrl();
 
+  // Web: use local backend while developing, cloud URL for production web builds
+  if (Platform.OS === 'web') {
+    return __DEV__ ? 'http://localhost:5000' : productionUrl;
+  }
+
   // Standalone APK/IPA (EAS build) — always use the public cloud server
   if (isStandaloneApp()) {
     return productionUrl;
-  }
-
-  if (Platform.OS === 'web') {
-    return __DEV__ ? 'http://localhost:5000' : productionUrl;
   }
 
   // Expo Go / dev client on a physical device or emulator
   if (__DEV__) {
     const host = resolveDevHost();
     if (host && !host.includes('ngrok') && !host.includes('expo.dev')) {
-      console.log(`[CleanTrack API] Dev host: ${host} -> http://${host}:5000`);
+      console.log(`[CrewLynk API] Dev host: ${host} -> http://${host}:5000`);
       return `http://${host}:5000`;
     }
 
     const fallback = Platform.OS === 'android' ? 'http://10.0.2.2:5000' : 'http://localhost:5000';
-    console.log(`[CleanTrack API] Dev fallback: ${fallback}`);
+    console.log(`[CrewLynk API] Dev fallback: ${fallback}`);
     return fallback;
   }
 
@@ -229,25 +230,33 @@ export const authAPI = {
     return res.data;
   },
 
-  requestOtp: async (email, role, name = '', phoneNumber = '', companyName = '') => {
+  requestOtp: async (email, role, name = '', phoneNumber = '', companyName = '', tags = '', locations = '', state = '', hourlyRate = '') => {
     const res = await apiClient.post('/auth/otp/request', {
       email,
       role,
       name,
       phoneNumber,
-      companyName
+      companyName,
+      tags,
+      locations,
+      state,
+      hourlyRate
     });
     return res.data;
   },
 
-  verifyOtp: async (email, code, role, name = '', phoneNumber = '', companyName = '') => {
+  verifyOtp: async (email, code, role, name = '', phoneNumber = '', companyName = '', tags = '', locations = '', state = '', hourlyRate = '') => {
     const res = await apiClient.post('/auth/otp/verify', {
       email,
       code,
       role,
       name,
       phoneNumber,
-      companyName
+      companyName,
+      tags,
+      locations,
+      state,
+      hourlyRate
     });
     if (res.data.success) {
       await setAuthToken(res.data.token);
@@ -308,6 +317,64 @@ export const contractorAPI = {
   getContracts: async () => {
     const res = await apiClient.get('/contractor/contracts');
     return res.data;
+  },
+  getClientRequests: async () => {
+    const res = await apiClient.get('/contractor/client-requests');
+    return res.data;
+  },
+  submitOffer: async (requestId, price) => {
+    const res = await apiClient.post(`/contractor/client-requests/${requestId}/offer`, { price });
+    return res.data;
+  },
+  getWorkers: async () => {
+    const res = await apiClient.get('/contractor/workers');
+    return res.data;
+  },
+  addWorker: async (workerId) => {
+    const res = await apiClient.post('/contractor/workers/add', { workerId });
+    return res.data;
+  },
+  getWorkerProfile: async (workerId, startDate = '', endDate = '') => {
+    let url = `/contractor/workers/${workerId}/profile`;
+    if (startDate && endDate) url += `?startDate=${startDate}&endDate=${endDate}`;
+    const res = await apiClient.get(url);
+    return res.data;
+  },
+  assignWorker: async (workerId, contractId) => {
+    const res = await apiClient.post(`/contractor/workers/${workerId}/assign`, { contractId });
+    return res.data;
+  },
+  postFreelanceJob: async (jobData) => {
+    const res = await apiClient.post('/contractor/freelance', jobData);
+    return res.data;
+  },
+  getFreelanceJobs: async () => {
+    const res = await apiClient.get('/contractor/freelance');
+    return res.data;
+  },
+  approveFreelancer: async (jobId, workerId) => {
+    const res = await apiClient.post(`/contractor/freelance/${jobId}/approve/${workerId}`);
+    return res.data;
+  },
+  upgradePackage: async () => {
+    const res = await apiClient.post('/contractor/package/upgrade');
+    return res.data;
+  },
+  selectPackage: async (packageId) => {
+    const res = await apiClient.post('/contractor/package/select', { packageId });
+    return res.data;
+  },
+  setRenewOption: async (autoRenew) => {
+    const res = await apiClient.post('/contractor/package/renew-option', { autoRenew });
+    return res.data;
+  },
+  renewPackage: async () => {
+    const res = await apiClient.post('/contractor/package/renew');
+    return res.data;
+  },
+  getSubscription: async () => {
+    const res = await apiClient.get('/contractor/package/subscription');
+    return res.data;
   }
 };
 
@@ -338,6 +405,45 @@ export const workerAPI = {
   },
   endAssignment: async (id) => {
     const res = await apiClient.post(`/worker/assignments/${id}/end`);
+    return res.data;
+  },
+  getFreelanceJobs: async () => {
+    const res = await apiClient.get('/worker/freelance');
+    return res.data;
+  },
+  applyFreelanceJob: async (jobId) => {
+    const res = await apiClient.post(`/worker/freelance/${jobId}/apply`);
+    return res.data;
+  },
+  getContractors: async () => {
+    const res = await apiClient.get('/worker/contractors');
+    return res.data;
+  },
+  getContractorProjects: async (contractorId) => {
+    const res = await apiClient.get(`/worker/contractors/${contractorId}/projects`);
+    return res.data;
+  }
+};
+
+export const clientAPI = {
+  createRequest: async (requestData) => {
+    const res = await apiClient.post('/client/requests', requestData);
+    return res.data;
+  },
+  getRequests: async () => {
+    const res = await apiClient.get('/client/requests');
+    return res.data;
+  },
+  getOffers: async (requestId) => {
+    const res = await apiClient.get(`/client/requests/${requestId}/offers`);
+    return res.data;
+  },
+  acceptOffer: async (requestId, offerId) => {
+    const res = await apiClient.post(`/client/requests/${requestId}/offers/${offerId}/accept`);
+    return res.data;
+  },
+  getContractors: async (category = '', location = '') => {
+    const res = await apiClient.get(`/client/contractors?category=${category}&location=${location}`);
     return res.data;
   }
 };

@@ -19,11 +19,11 @@ export const Colors = {
   success: '#047857',        // Green Success
   successMuted: 'rgba(4, 120, 87, 0.08)',
   
-  danger: '#EF4444',         // Red alert & danger actions
-  dangerMuted: 'rgba(239, 68, 68, 0.08)',
+  danger: '#1E3A8A',         // Warning/danger themed as Dark Blue (no red allowed)
+  dangerMuted: 'rgba(30, 58, 138, 0.08)',
   
-  warning: '#F59E0B',        // Amber warnings
-  warningMuted: 'rgba(245, 158, 11, 0.08)',
+  warning: '#047857',        // Amber warnings themed as Green (no yellow/orange allowed)
+  warningMuted: 'rgba(4, 120, 87, 0.08)',
 
   info: '#1E3A8A',           // Dark Blue Info
   infoMuted: 'rgba(30, 58, 138, 0.08)',

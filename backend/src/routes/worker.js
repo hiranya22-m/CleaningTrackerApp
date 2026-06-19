@@ -6,15 +6,29 @@ const {
   getNotifications,
   markNotificationRead,
   startAssignmentJob,
-  endAssignmentJob
+  endAssignmentJob,
+  getFreelanceJobsForWorker,
+  applyForFreelanceJob,
+  getAssociatedContractors,
+  getContractorProjectsForWorker
 } = require('../controllers/workerController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
-router.get('/assignments', protect, authorize('worker'), getAssignments);
-router.post('/assignments/:id/respond', protect, authorize('worker'), respondToAssignment);
-router.get('/notifications', protect, authorize('worker'), getNotifications);
-router.put('/notifications/:id/read', protect, authorize('worker'), markNotificationRead);
-router.post('/assignments/:id/start', protect, authorize('worker'), startAssignmentJob);
-router.post('/assignments/:id/end', protect, authorize('worker'), endAssignmentJob);
+// All worker routes require worker authorization
+router.use(protect);
+router.use(authorize('worker'));
+
+router.get('/assignments', getAssignments);
+router.post('/assignments/:id/respond', respondToAssignment);
+router.get('/notifications', getNotifications);
+router.put('/notifications/:id/read', markNotificationRead);
+router.post('/assignments/:id/start', startAssignmentJob);
+router.post('/assignments/:id/end', endAssignmentJob);
+
+// Freelance & Contractors
+router.get('/freelance', getFreelanceJobsForWorker);
+router.post('/freelance/:id/apply', applyForFreelanceJob);
+router.get('/contractors', getAssociatedContractors);
+router.get('/contractors/:id/projects', getContractorProjectsForWorker);
 
 module.exports = router;

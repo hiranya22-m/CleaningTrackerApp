@@ -14,6 +14,7 @@ import {
   BackHandler,
   RefreshControl
 } from 'react-native';
+import backScrollEmitter from '../utils/backScrollEmitter';
 import { Colors } from '../theme/colors';
 import { authAPI, CURRENT_BASE_URL } from '../api/client';
 import AppFooter from '../components/AppFooter';
@@ -89,8 +90,10 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
 
   // Listen to navigation parameters to auto-trigger step 2 for registration flow!
   useEffect(() => {
-    if (params && params.registerFlow) {
+    if (params && params.role) {
       setSelectedRole(params.role);
+    }
+    if (params && params.registerFlow) {
       setOtpEmail(params.email);
       setOtpStep(2);
       setTimer(300);
@@ -129,6 +132,11 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
   // Handle hardware back press (Android)
   useEffect(() => {
     const backAction = () => {
+      let handled = false;
+      const markHandled = () => { handled = true; };
+      backScrollEmitter.requestScrollToTop(markHandled);
+      if (handled) return true;
+
       if (isOtpRole && otpStep === 2) {
         setOtpStep(1);
         setOtpCode('');
@@ -137,13 +145,24 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
       return false; // run default behavior
     };
 
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      backAction
-    );
-
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
   }, [otpStep, selectedRole]);
+
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    const listener = (markHandled) => {
+      try {
+        if (scrollRef.current && scrollRef.current.scrollTo) {
+          scrollRef.current.scrollTo({ y: 0, animated: true });
+          markHandled();
+        }
+      } catch (e) {}
+    };
+    const unsub = backScrollEmitter.subscribe(listener);
+    return () => unsub();
+  }, []);
 
   // Resend cooldown
   useEffect(() => {
@@ -200,7 +219,11 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
         // If we are in register flow, pass the registration details for resending!
         params && params.registerFlow ? params.name : '',
         params && params.registerFlow ? params.phoneNumber : '',
-        params && params.registerFlow ? params.companyName : ''
+        params && params.registerFlow ? params.companyName : '',
+        params && params.registerFlow ? params.tags : '',
+        params && params.registerFlow ? params.locations : '',
+        params && params.registerFlow ? params.state : '',
+        params && params.registerFlow ? params.hourlyRate : ''
       );
       setLoading(false);
       if (res.success) {
@@ -265,7 +288,11 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
         // If we came from the register flow, pass the registration details!
         params && params.registerFlow ? params.name : '',
         params && params.registerFlow ? params.phoneNumber : '',
-        params && params.registerFlow ? params.companyName : ''
+        params && params.registerFlow ? params.companyName : '',
+        params && params.registerFlow ? params.tags : '',
+        params && params.registerFlow ? params.locations : '',
+        params && params.registerFlow ? params.state : '',
+        params && params.registerFlow ? params.hourlyRate : ''
       );
       setLoading(false);
       if (res.success) {
@@ -279,7 +306,7 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
     }
   };
 
-  const isOtpRole = selectedRole === 'worker' || selectedRole === 'contractor';
+  const isOtpRole = selectedRole === 'worker' || selectedRole === 'contractor' || selectedRole === 'client';
 
   return (
     <KeyboardAvoidingView
@@ -291,6 +318,7 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
       <View style={styles.blobBottomLeft} />
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scrollContainer}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -320,8 +348,18 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
             resizeMode="contain"
           />
 
-          <Text style={styles.cardTitle}>Sign In</Text>
-          <Text style={styles.cardSubtitle}>Access your CrewLynk account station</Text>
+          <Text style={styles.cardTitle}>
+            {selectedRole === 'admin' ? 'Admin Sign In' :
+             selectedRole === 'contractor' ? 'Contractor Sign In' :
+             selectedRole === 'client' ? 'Client Sign In' :
+             'Crew Member Sign In'}
+          </Text>
+          <Text style={styles.cardSubtitle}>
+            {selectedRole === 'admin' ? 'Access the admin control center' :
+             selectedRole === 'contractor' ? 'Access your contracting business dashboard' :
+             selectedRole === 'client' ? 'Access your client partner portal' :
+             'Access your crew shifts and hours log'}
+          </Text>
 
           <Animated.View style={[styles.formArea, { opacity: fadeAnim }]}>
 
@@ -451,7 +489,9 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
                       : params && params.registerFlow
                       ? selectedRole === 'contractor'
                         ? '✅ Verify & Register Contractor'
-                        : '✅ Verify & Register Worker'
+                        : selectedRole === 'client'
+                        ? '✅ Verify & Register Client Partner'
+                        : '✅ Verify & Register Crew Member'
                       : '✅ Verify & Sign In'
                   }
                   type="primary" // Green SaaS
@@ -479,7 +519,7 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
                   style={styles.changeEmailBtn}
                   onPress={() => {
                     if (params && params.registerFlow) {
-                      navigation.navigate('Register');
+                      navigation.navigate('Register', { role: selectedRole });
                     } else {
                       fadeTransition(() => { setOtpStep(1); setOtpCode(''); });
                     }
@@ -496,7 +536,7 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
           {/* Footer links */}
           <View style={styles.footerRow}>
             <Text style={styles.footerLabel}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+            <TouchableOpacity onPress={() => navigation.navigate('Register', { role: selectedRole })}>
               <Text style={styles.registerLink}>Create Account</Text>
             </TouchableOpacity>
           </View>

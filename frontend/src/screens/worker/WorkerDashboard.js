@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, RefreshControl, StyleSheet, Alert, TouchableOpacity, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, RefreshControl, StyleSheet, Alert, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { Colors } from '../../theme/colors';
 import { jobsAPI, attendanceAPI, workerAPI, getBaseUrl } from '../../api/client';
 import AppFooter from '../../components/AppFooter';
 import io from 'socket.io-client';
+import backScrollEmitter from '../../utils/backScrollEmitter';
 
 const WorkerDashboard = ({ user, onLogout, navigation }) => {
   const [activeTab, setActiveTab] = useState('jobs'); // 'jobs', 'offers', 'history'
@@ -15,6 +16,15 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingShift, setLoadingShift] = useState(false);
   const [ticker, setTicker] = useState(0); // Periodic state to trigger timer re-renders
+
+  // Freelance & Contractors states
+  const [freelanceJobs, setFreelanceJobs] = useState([]);
+  const [loadingFreelance, setLoadingFreelance] = useState(false);
+  const [contractors, setContractors] = useState([]);
+  const [loadingContractors, setLoadingContractors] = useState(false);
+  const [selectedContractor, setSelectedContractor] = useState(null);
+  const [contractorProjects, setContractorProjects] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
 
   const loadData = async () => {
     try {
@@ -83,9 +93,32 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
     };
   }, []);
 
+  const scrollRef = useRef(null);
+  useEffect(() => {
+    const listener = (markHandled) => {
+      try {
+        if (scrollRef.current && scrollRef.current.scrollTo) {
+          scrollRef.current.scrollTo({ y: 0, animated: true });
+          markHandled();
+        }
+      } catch (e) {}
+    };
+    const unsub = backScrollEmitter.subscribe(listener);
+    return () => unsub();
+  }, []);
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await loadData();
+    if (activeTab === 'freelance') {
+      await fetchFreelanceJobs();
+    } else if (activeTab === 'contractors') {
+      if (selectedContractor) {
+        await fetchContractorProjects(selectedContractor._id);
+      } else {
+        await fetchContractors();
+      }
+    }
     setRefreshing(false);
   };
 
@@ -135,6 +168,74 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
       Alert.alert('Error', e.response?.data?.message || 'Server error occurred');
     }
   };
+
+  const fetchFreelanceJobs = async () => {
+    setLoadingFreelance(true);
+    try {
+      const res = await workerAPI.getFreelanceJobs();
+      if (res.success) {
+        setFreelanceJobs(res.freelanceJobs);
+      }
+    } catch (e) {
+      console.error('Error fetching freelance jobs:', e);
+      Alert.alert('Error', 'Failed to fetch freelance jobs');
+    } finally {
+      setLoadingFreelance(false);
+    }
+  };
+
+  const handleApplyFreelance = async (jobId) => {
+    try {
+      const res = await workerAPI.applyFreelanceJob(jobId);
+      if (res.success) {
+        Alert.alert('Applied! 🎉', 'You have successfully applied for this freelance job opening.');
+        fetchFreelanceJobs();
+      } else {
+        Alert.alert('Application Failed', res.message || 'Error applying');
+      }
+    } catch (e) {
+      Alert.alert('Error', e.response?.data?.message || 'Server error applying');
+    }
+  };
+
+  const fetchContractors = async () => {
+    setLoadingContractors(true);
+    try {
+      const res = await workerAPI.getContractors();
+      if (res.success) {
+        setContractors(res.contractors);
+      }
+    } catch (e) {
+      console.error('Error fetching associated contractors:', e);
+      Alert.alert('Error', 'Failed to fetch associated contractors');
+    } finally {
+      setLoadingContractors(false);
+    }
+  };
+
+  const fetchContractorProjects = async (contractorId) => {
+    setLoadingProjects(true);
+    try {
+      const res = await workerAPI.getContractorProjects(contractorId);
+      if (res.success) {
+        setContractorProjects(res.jobs);
+      }
+    } catch (e) {
+      console.error('Error fetching contractor projects:', e);
+      Alert.alert('Error', 'Failed to fetch contractor projects');
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'freelance') {
+      fetchFreelanceJobs();
+    } else if (activeTab === 'contractors') {
+      fetchContractors();
+      setSelectedContractor(null);
+    }
+  }, [activeTab]);
 
   // Helper to compute remaining time for timer
   const getRemainingTimeText = (deadline) => {
@@ -195,8 +296,10 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="always"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
         }
@@ -205,9 +308,9 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
         <View style={styles.profileBanner}>
           <View style={styles.profileDetails}>
             <Text style={styles.welcomeGreeting}>Hello, {user.name.split(' ')[0]}! 👋</Text>
-            <Text style={styles.profileRole}>Role: Professional Cleaning Crew</Text>
+            <Text style={styles.profileRole}>Role: Professional Crew</Text>
             <Text style={styles.profileMeta}>Registered Email: {user.email}</Text>
-            <Text style={styles.profileMeta}>Crew ID: {user._id || 'No ID'}</Text>
+            <Text style={styles.profileMeta}>Crew ID: {user.workerIdNumber || user._id || 'No ID'}</Text>
           </View>
           <View style={styles.bannerIconContainer}>
             <Text style={styles.bannerIcon}>✨</Text>
@@ -426,6 +529,151 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
           </View>
         )}
 
+        {activeTab === 'freelance' && (
+          <View style={styles.scheduleCard}>
+            <Text style={styles.sectionTitle}>💼 Open Freelance Openings</Text>
+            <Text style={styles.sectionSubtitle}>View and apply to freelance jobs matching your capabilities and state.</Text>
+            {loadingFreelance ? (
+              <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
+            ) : freelanceJobs.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyEmoji}>💼</Text>
+                <Text style={styles.emptyText}>No freelance openings found</Text>
+                <Text style={styles.emptySub}>Matching jobs in your state with your capabilities will show up here.</Text>
+              </View>
+            ) : (
+              freelanceJobs.map((job) => {
+                const isApprovedWorker = job.approvedWorker && (job.approvedWorker === user.id || job.approvedWorker._id === user.id);
+                const hasApplied = job.applicants?.includes(user.id) || isApprovedWorker;
+                const isCrewShift = job.targetType === 'crew';
+                return (
+                  <View key={job._id} style={styles.freelanceCard}>
+                    <View style={styles.freelanceHeader}>
+                      <View style={{ flex: 1, marginRight: 8 }}>
+                        <Text style={styles.freelanceCategoryText}>🧹 {job.category} {isCrewShift && <Text style={{ fontSize: 9, color: '#3B82F6', fontWeight: '800' }}>[ROSTER TARGETED]</Text>}</Text>
+                        <Text style={styles.freelanceCompanyText}>🏢 {job.contractor?.companyName || 'Freelance Contractor'}</Text>
+                      </View>
+                      <View style={styles.priceBadge}>
+                        <Text style={styles.priceBadgeText}>${job.pricePerHour}/hr</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.freelanceDateText}>📅 Date: {new Date(job.date).toLocaleDateString()} at {job.time}</Text>
+                    <Text style={styles.freelanceDateText}>⏱️ Duration: {job.hours} hours (Est. Payout: ${job.hours * job.pricePerHour})</Text>
+                    <Text style={styles.freelanceDateText}>📍 Location: {job.location}</Text>
+                    <View style={styles.divider} />
+                    <Text style={styles.freelanceDescText}>Description: {job.description}</Text>
+                    
+                    <TouchableOpacity
+                      style={[
+                        styles.applyBtn, 
+                        hasApplied && styles.applyBtnDisabled,
+                        !hasApplied && isCrewShift && { backgroundColor: '#10B981', shadowColor: '#10B981' }
+                      ]}
+                      onPress={() => !hasApplied && handleApplyFreelance(job._id)}
+                      disabled={hasApplied}
+                    >
+                      <Text style={styles.applyBtnText}>
+                        {hasApplied 
+                          ? (isApprovedWorker ? 'Accepted ✓' : 'Applied ✓') 
+                          : isCrewShift 
+                          ? 'Accept Crew Shift ➔' 
+                          : 'Apply for Opening'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+
+        {activeTab === 'contractors' && (
+          <View>
+            {selectedContractor ? (
+              <View style={styles.scheduleCard}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                  <Text style={styles.sectionTitle}>📅 Completed Shifts under {selectedContractor.companyName || selectedContractor.name}</Text>
+                  <TouchableOpacity
+                    style={styles.backBtn}
+                    onPress={() => setSelectedContractor(null)}
+                  >
+                    <Text style={styles.backBtnText}>← Back</Text>
+                  </TouchableOpacity>
+                </View>
+                {loadingProjects ? (
+                  <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
+                ) : contractorProjects.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyEmoji}>📅</Text>
+                    <Text style={styles.emptyText}>No completed shifts found</Text>
+                    <Text style={styles.emptySub}>You haven't completed any shifts under this contractor yet.</Text>
+                  </View>
+                ) : (
+                  contractorProjects.map((proj) => {
+                    const status = getStatusConfig(proj.status);
+                    return (
+                      <View key={proj._id} style={styles.projectCard}>
+                        <View style={styles.projectHeader}>
+                          <Text style={styles.projectTitle}>📍 {proj.address}</Text>
+                          <View style={[styles.statusBadge, { backgroundColor: status.bgColor }]}>
+                            <Text style={[styles.statusBadgeText, { color: status.color }]}>{status.label}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.projectTime}>
+                          📅 Date: {new Date(proj.startTime).toLocaleDateString()}
+                        </Text>
+                        <Text style={styles.projectTime}>
+                          ⏱️ Worked: {proj.totalHoursWorked || 0} hrs
+                        </Text>
+                        {proj.customerName && (
+                          <Text style={styles.projectTime}>
+                            👤 Client: {proj.customerName}
+                          </Text>
+                        )}
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+            ) : (
+              <View style={styles.scheduleCard}>
+                <Text style={styles.sectionTitle}>👥 Associated Contractors</Text>
+                <Text style={styles.sectionSubtitle}>View companies and contractors you are rostered with or have worked with.</Text>
+                {loadingContractors ? (
+                  <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
+                ) : contractors.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Text style={styles.emptyEmoji}>👥</Text>
+                    <Text style={styles.emptyText}>No associated contractors</Text>
+                    <Text style={styles.emptySub}>Apply for freelance jobs or join their crew roster.</Text>
+                  </View>
+                ) : (
+                  contractors.map((c) => (
+                    <TouchableOpacity
+                      key={c._id}
+                      style={styles.contractorCard}
+                      onPress={() => {
+                        setSelectedContractor(c);
+                        fetchContractorProjects(c._id);
+                      }}
+                      activeOpacity={0.8}
+                    >
+                      <View style={styles.contractorHeader}>
+                        <Text style={styles.contractorCompany}>{c.companyName || 'Freelance Contractor'}</Text>
+                        <Text style={styles.contractorName}>👤 {c.name}</Text>
+                      </View>
+                      <Text style={styles.contractorContact}>✉️ {c.email}  |  📞 {c.phoneNumber}</Text>
+                      <View style={styles.viewProjectsBtn}>
+                        <Text style={styles.viewProjectsBtnText}>View Shift History →</Text>
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
         <AppFooter />
       </ScrollView>
 
@@ -434,6 +682,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
         <TouchableOpacity
           style={styles.tabBarItem}
           activeOpacity={0.8}
+          hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
           onPress={() => setActiveTab('jobs')}
         >
           <Text style={[styles.tabBarIcon, activeTab === 'jobs' && styles.tabBarIconActive]}>🏠</Text>
@@ -444,6 +693,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
         <TouchableOpacity
           style={styles.tabBarItem}
           activeOpacity={0.8}
+          hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
           onPress={() => setActiveTab('offers')}
         >
           <View style={styles.iconBadgeWrapper}>
@@ -461,6 +711,29 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
         <TouchableOpacity
           style={styles.tabBarItem}
           activeOpacity={0.8}
+          hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
+          onPress={() => setActiveTab('freelance')}
+        >
+          <Text style={[styles.tabBarIcon, activeTab === 'freelance' && styles.tabBarIconActive]}>💼</Text>
+          <Text style={[styles.tabBarLabel, activeTab === 'freelance' && styles.tabBarLabelActive]}>Freelance</Text>
+          {activeTab === 'freelance' && <View style={styles.tabActiveIndicator} />}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.tabBarItem}
+          activeOpacity={0.8}
+          hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
+          onPress={() => setActiveTab('contractors')}
+        >
+          <Text style={[styles.tabBarIcon, activeTab === 'contractors' && styles.tabBarIconActive]}>👥</Text>
+          <Text style={[styles.tabBarLabel, activeTab === 'contractors' && styles.tabBarLabelActive]}>Contractors</Text>
+          {activeTab === 'contractors' && <View style={styles.tabActiveIndicator} />}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.tabBarItem}
+          activeOpacity={0.8}
+          hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
           onPress={() => setActiveTab('history')}
         >
           <Text style={[styles.tabBarIcon, activeTab === 'history' && styles.tabBarIconActive]}>📊</Text>
@@ -875,7 +1148,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flex: 1,
     height: '100%',
-    paddingTop: 4
+    paddingTop: 4,
+    paddingVertical: 8
   },
   tabBarIcon: {
     fontSize: 20,
@@ -998,6 +1272,183 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#0F172A',
     marginTop: 6
+  },
+  
+  // ── New Crewlynk System Styles ──
+  sectionSubtitle: {
+    fontSize: 11.5,
+    color: '#64748B',
+    fontWeight: '600',
+    marginBottom: 16
+  },
+  freelanceCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1
+  },
+  freelanceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  freelanceCategoryText: {
+    fontSize: 14,
+    fontWeight: '850',
+    color: '#0F172A'
+  },
+  freelanceCompanyText: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
+    marginTop: 2
+  },
+  freelanceDateText: {
+    fontSize: 11.5,
+    color: '#64748B',
+    fontWeight: '600',
+    marginBottom: 4
+  },
+  freelanceDescText: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600',
+    lineHeight: 18,
+    marginBottom: 12
+  },
+  priceBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8
+  },
+  priceBadgeText: {
+    color: Colors.primary,
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  applyBtn: {
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 2
+  },
+  applyBtnDisabled: {
+    backgroundColor: '#94A3B8',
+    shadowOpacity: 0,
+    elevation: 0
+  },
+  applyBtnText: {
+    color: Colors.white,
+    fontSize: 13,
+    fontWeight: '850'
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+    marginVertical: 12
+  },
+  contractorCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1
+  },
+  contractorHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  contractorCompany: {
+    fontSize: 14,
+    fontWeight: '850',
+    color: '#0F172A'
+  },
+  contractorName: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600'
+  },
+  contractorContact: {
+    fontSize: 11.5,
+    color: '#64748B',
+    fontWeight: '600',
+    marginBottom: 12
+  },
+  viewProjectsBtn: {
+    borderWidth: 1.2,
+    borderColor: Colors.primary,
+    borderRadius: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  viewProjectsBtnText: {
+    color: Colors.primary,
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  projectCard: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    marginBottom: 10
+  },
+  projectHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6
+  },
+  projectTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+    flex: 1,
+    marginRight: 6
+  },
+  projectTime: {
+    fontSize: 11.5,
+    color: '#475569',
+    fontWeight: '600',
+    marginBottom: 2
+  },
+  backBtn: {
+    backgroundColor: '#E2E8F0',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignSelf: 'flex-start'
+  },
+  backBtnText: {
+    color: '#475569',
+    fontSize: 11.5,
+    fontWeight: '800'
   }
 });
 

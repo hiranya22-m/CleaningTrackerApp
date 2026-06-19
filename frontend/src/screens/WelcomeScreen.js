@@ -1,14 +1,31 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, Alert } from 'react-native';
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, Alert, useWindowDimensions } from 'react-native';
+import backScrollEmitter from '../utils/backScrollEmitter';
+import { User, HardHat, Briefcase } from 'lucide-react-native';
 import { Colors } from '../theme/colors';
 import AppFooter from '../components/AppFooter';
-import CustomButton from '../components/CustomButton';
 import { CURRENT_BASE_URL, setDynamicBaseUrl, getConfiguredProductionUrl, isStandaloneApp } from '../api/client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const WelcomeScreen = ({ navigation }) => {
   const [showConfig, setShowConfig] = useState(false);
   const [inputUrl, setInputUrl] = useState(CURRENT_BASE_URL);
+  const { width } = useWindowDimensions();
+  const isDesktop = width > 768;
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    const listener = (markHandled) => {
+      try {
+        if (scrollRef.current && scrollRef.current.scrollTo) {
+          scrollRef.current.scrollTo({ y: 0, animated: true });
+          markHandled();
+        }
+      } catch (e) {}
+    };
+    const unsub = backScrollEmitter.subscribe(listener);
+    return () => unsub();
+  }, []);
 
   const handleSaveConfig = async () => {
     if (!inputUrl.trim()) {
@@ -40,7 +57,7 @@ const WelcomeScreen = ({ navigation }) => {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+    <ScrollView ref={scrollRef} contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
       {/* Developer Server Configuration Modal */}
       <Modal
         visible={showConfig}
@@ -78,51 +95,91 @@ const WelcomeScreen = ({ navigation }) => {
         </View>
       </Modal>
 
-      {/* Decorative green & blue gradient blobs for visual interest */}
-      <View style={styles.glowTop} />
-      <View style={styles.glowBottom} />
+      {/* Brand Logo */}
+      <Image
+        source={require('../assets/logo.png')}
+        style={styles.logoImage}
+        resizeMode="contain"
+      />
 
-      <View style={styles.brandingBox}>
-        {/* Compact, Balanced Brand Logo */}
-        <Image
-          source={require('../assets/logo.png')}
-          style={styles.logoImage}
-          resizeMode="contain"
-        />
-        <Text style={styles.subtext}>Workforce dispatch, live GPS tracking, and payout operations.</Text>
+      {/* Main Header Area */}
+      <View style={styles.headerContainer}>
+        <Text style={styles.preTitle}>THREE PORTALS</Text>
+        <Text style={styles.mainTitle}>Pick Your Role</Text>
+        <Text style={styles.subtext}>
+          Each role gets a tailored dashboard with the exact tools they need — nothing more, nothing less.
+        </Text>
       </View>
 
-      {/* Modern Card Layout */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Workforce Operations Simplified</Text>
-        <Text style={styles.cardSubtitle}>
-          Connect contractors, manage shift rotas, and verify GPS clock-ins on a unified SaaS platform.
-        </Text>
+      {/* Cards Container */}
+      <View style={[styles.cardsWrapper, isDesktop ? styles.rowLayout : styles.columnLayout]}>
         
-        <View style={styles.buttonCol}>
-          <CustomButton
-            title="Create Free Account"
-            type="primary" // Green SaaS
-            onPress={() => navigation.navigate('Register')}
-            style={styles.actionBtn}
-          />
-
-          <CustomButton
-            title="Sign In to Portal"
-            type="outline" // Blue Outline SaaS
-            onPress={() => navigation.navigate('Login')}
-            style={styles.actionBtn}
-          />
+        {/* Card 1: Client */}
+        <View style={[styles.card, styles.clientBorder]}>
+          <View style={styles.cardContent}>
+            <View style={[styles.iconContainer, styles.clientIconBg]}>
+              <View style={styles.glossyOverlaySmall} />
+              <User color="#FFFFFF" size={24} />
+            </View>
+            <Text style={styles.roleTitle}>Client</Text>
+            <TouchableOpacity
+              style={[styles.joinButton, styles.clientButton]}
+              onPress={() => navigation.navigate('Register', { role: 'client' })}
+              activeOpacity={0.8}
+            >
+              <View style={styles.glossyOverlay} />
+              <Text style={styles.joinButtonText}>Join as Client  ›</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
-        <Text style={styles.actionFooter}>Enterprise-grade security and automated GPS geofencing built-in.</Text>
+        {/* Card 2: Crew Member */}
+        <View style={[styles.card, styles.workerBorder]}>
+          <View style={styles.cardContent}>
+            <View style={[styles.iconContainer, styles.workerIconBg]}>
+              <View style={styles.glossyOverlaySmall} />
+              <HardHat color="#FFFFFF" size={24} />
+            </View>
+            <Text style={styles.roleTitle}>Crew Member</Text>
+            <TouchableOpacity
+              style={[styles.joinButton, styles.workerButton]}
+              onPress={() => navigation.navigate('Register', { role: 'worker' })}
+              activeOpacity={0.8}
+            >
+              <View style={styles.glossyOverlay} />
+              <Text style={styles.joinButtonText}>Join as Crew Member  ›</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Card 3: Contractor */}
+        <View style={[styles.card, styles.contractorBorder]}>
+          <View style={styles.cardContent}>
+            <View style={[styles.iconContainer, styles.contractorIconBg]}>
+              <View style={styles.glossyOverlaySmall} />
+              <Briefcase color="#FFFFFF" size={24} />
+            </View>
+            <Text style={styles.roleTitle}>Contractor</Text>
+            <TouchableOpacity
+              style={[styles.joinButton, styles.contractorButton]}
+              onPress={() => navigation.navigate('Register', { role: 'contractor' })}
+              activeOpacity={0.8}
+            >
+              <View style={styles.glossyOverlay} />
+              <Text style={styles.joinButtonText}>Join as Contractor  ›</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
       </View>
 
+      {/* Developer Config Trigger */}
       <TouchableOpacity
         activeOpacity={0.7}
         onLongPress={() => {
           if (!isStandaloneApp()) setShowConfig(true);
         }}
+        style={{ marginTop: 40, marginBottom: 20 }}
       >
         <Text style={styles.debugText}>
           Server: {CURRENT_BASE_URL}
@@ -138,106 +195,172 @@ const WelcomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#F8FAFC', // Slate 50 background
-    padding: 20,
-    justifyContent: 'center',
-    position: 'relative',
-    overflow: 'hidden'
-  },
-  glowTop: {
-    position: 'absolute',
-    top: -100,
-    left: -100,
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: 'rgba(37, 99, 235, 0.05)', // SaaS Blue soft glow
-    zIndex: -1
-  },
-  glowBottom: {
-    position: 'absolute',
-    bottom: -80,
-    right: -80,
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: 'rgba(16, 185, 129, 0.04)', // SaaS Green soft glow
-    zIndex: -1
-  },
-  brandingBox: {
+    backgroundColor: '#FFFFFF', // Clean White background
+    paddingVertical: 50,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    marginBottom: 24,
-    marginTop: 20
+    justifyContent: 'center'
   },
   logoImage: {
-    width: 280,
-    height: 120,
-    marginBottom: 16
+    width: 180,
+    height: 60,
+    marginBottom: 20,
+    alignSelf: 'center'
+  },
+  headerContainer: {
+    alignItems: 'center',
+    marginBottom: 40,
+    maxWidth: 600,
+    textAlign: 'center'
+  },
+  preTitle: {
+    fontSize: 11,
+    fontWeight: '950',
+    color: '#0D9488', // Green/Teal accent
+    letterSpacing: 1.5,
+    marginBottom: 8,
+    textTransform: 'uppercase'
+  },
+  mainTitle: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#0F172A', // Slate 900
+    marginBottom: 12,
+    letterSpacing: -0.5
   },
   subtext: {
-    fontSize: 11,
-    color: '#64748B',
+    fontSize: 13.5,
+    color: '#64748B', // Slate 500
     fontWeight: '600',
     textAlign: 'center',
-    maxWidth: 240,
-    lineHeight: 15
+    lineHeight: 20
   },
+  
+  // Cards Layout
+  cardsWrapper: {
+    width: '100%',
+    maxWidth: 960,
+    gap: 20,
+    justifyContent: 'center'
+  },
+  rowLayout: {
+    flexDirection: 'row'
+  },
+  columnLayout: {
+    flexDirection: 'column',
+    alignItems: 'center'
+  },
+  
+  // Card base styles
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    paddingVertical: 28,
-    paddingHorizontal: 22,
-    alignItems: 'center',
-    shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.03,
-    shadowRadius: 10,
-    elevation: 4,
-    marginBottom: 20
+    flex: 1,
+    width: '100%',
+    maxWidth: 300,
+    backgroundColor: '#FFFFFF', // White card background!
+    borderRadius: 20, // Rounded corners matching screenshot
+    overflow: 'hidden',
+    shadowColor: '#2563EB', // Glowing shiny blue shadow
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.12, // Vibrant shadow
+    shadowRadius: 20,
+    elevation: 5,
+    position: 'relative'
   },
-  cardTitle: {
+  cardContent: {
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    height: 220 // Explicit height so they remain identical
+  },
+  
+  // Borders
+  clientBorder: {
+    borderColor: '#2563EB', // Brand Blue
+    borderWidth: 1.5
+  },
+  workerBorder: {
+    borderColor: '#2563EB', // Brand Blue
+    borderWidth: 1.5
+  },
+  contractorBorder: {
+    borderColor: '#2563EB', // Brand Blue
+    borderWidth: 1.5
+  },
+  
+  // Icon containers
+  iconContainer: {
+    width: 54,
+    height: 54,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10
+  },
+  clientIconBg: {
+    backgroundColor: '#2563EB'
+  },
+  workerIconBg: {
+    backgroundColor: '#2563EB'
+  },
+  contractorIconBg: {
+    backgroundColor: '#2563EB'
+  },
+  
+  // Title
+  roleTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 6,
-    textAlign: 'center'
-  },
-  cardSubtitle: {
-    fontSize: 12,
-    color: '#64748B',
-    fontWeight: '550',
-    marginBottom: 22,
-    textAlign: 'center',
-    lineHeight: 17,
-    paddingHorizontal: 8
-  },
-  buttonCol: {
-    width: '100%',
-    gap: 12,
+    color: '#0F172A', // Slate 900
     marginBottom: 16
   },
-  actionBtn: {
-    height: 46
+  
+  // Buttons
+  joinButton: {
+    width: '100%',
+    paddingVertical: 12,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
-  actionFooter: {
-    fontSize: 9.5,
-    color: '#94A3B8',
-    fontWeight: '600',
-    letterSpacing: 0.1,
-    textAlign: 'center'
+  joinButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800'
   },
-  debugText: {
-    fontSize: 10,
-    color: '#64748B',
-    textAlign: 'center',
-    marginBottom: 14,
-    fontWeight: '700'
+  clientButton: {
+    backgroundColor: '#047857'
   },
+  workerButton: {
+    backgroundColor: '#047857'
+  },
+  contractorButton: {
+    backgroundColor: '#047857'
+  },
+  glossyOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10
+  },
+  glossyOverlaySmall: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1.5,
+    backgroundColor: 'rgba(255, 255, 255, 0.45)',
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 12
+  },
+  
+  // Config Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)', // Muted glassmorphism overlay
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20
@@ -297,7 +420,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F1F5F9'
   },
   modalBtnSave: {
-    backgroundColor: Colors.primary // Green
+    backgroundColor: Colors.primary
   },
   modalBtnTextCancel: {
     color: '#64748B',
@@ -308,6 +431,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '800'
+  },
+  debugText: {
+    fontSize: 10,
+    color: '#94A3B8',
+    textAlign: 'center',
+    fontWeight: '700'
   }
 });
 

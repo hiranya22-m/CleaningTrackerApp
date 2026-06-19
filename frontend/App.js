@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -16,8 +16,11 @@ import WorkerDashboard from './src/screens/worker/WorkerDashboard';
 import ActiveJobScreen from './src/screens/worker/ActiveJobScreen';
 import AdminDashboard from './src/screens/admin/AdminDashboard';
 import ContractorDashboard from './src/screens/contractor/ContractorDashboard';
+import ClientDashboard from './src/screens/client/ClientDashboard';
 
 import { setAuthToken, setCurrentUserStore, loadPersistentSession, authAPI, initializeBaseUrl } from './src/api/client';
+import { BackHandler } from 'react-native';
+import backScrollEmitter from './src/utils/backScrollEmitter';
 
 const Stack = createStackNavigator();
 
@@ -25,6 +28,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState('');
   const [loadingSession, setLoadingSession] = useState(true);
+  const navigationRef = useRef(null);
 
   // Auto-login session restore effect on boot — validates token against server
   useEffect(() => {
@@ -67,14 +71,56 @@ export default function App() {
     validateAndRestoreSession();
   }, []);
 
+  // Global hardware back handler: if a screen can scroll up, scroll to top first.
+  useEffect(() => {
+    const onBackPress = () => {
+      let handled = false;
+      const markHandled = () => { handled = true; };
+      backScrollEmitter.requestScrollToTop(markHandled);
+
+      if (handled) return true; // we scrolled to top, prevent navigation
+
+      if (navigationRef.current && navigationRef.current.canGoBack()) {
+        navigationRef.current.goBack();
+        return true;
+      }
+      return false; // allow OS default (exit app)
+    };
+
+    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => sub.remove();
+  }, []);
+
   const handleLoginSuccess = async (loggedInUser, userToken) => {
     setToken(userToken);
     await setAuthToken(userToken);
     await setCurrentUserStore(loggedInUser); // Cache user profile
     setUser(loggedInUser);
-    
+
+    if (navigationRef.current) {
+      const targetRoute = loggedInUser.role === 'admin'
+        ? 'AdminCore'
+        : loggedInUser.role === 'contractor'
+          ? 'ContractorCore'
+          : loggedInUser.role === 'client'
+            ? 'ClientCore'
+            : 'WorkerHome';
+
+      setTimeout(() => {
+        try {
+          if (navigationRef.current) {
+            navigationRef.current.reset({
+              index: 0,
+              routes: [{ name: targetRoute }]
+            });
+          }
+        } catch (err) {
+          console.log('Navigation reset bypassed:', err.message);
+        }
+      }, 0);
+    }
+
     // For React Native Web: force a clean browser reload to clear active navigation state
-    // and instantly boot straight into the Contractor/Worker dashboard automatically!
     if (Platform.OS === 'web') {
       window.location.reload();
     }
@@ -84,7 +130,22 @@ export default function App() {
     setToken('');
     await setAuthToken(''); // Clears dynamic storage cache
     setUser(null);
-    
+
+    if (navigationRef.current) {
+      setTimeout(() => {
+        try {
+          if (navigationRef.current) {
+            navigationRef.current.reset({
+              index: 0,
+              routes: [{ name: 'Welcome' }]
+            });
+          }
+        } catch (err) {
+          console.log('Logout navigation reset bypassed:', err.message);
+        }
+      }, 0);
+    }
+
     if (Platform.OS === 'web') {
       window.location.reload();
     }
@@ -97,7 +158,7 @@ export default function App() {
   return (
     <SafeAreaProvider style={{ backgroundColor: Colors.background }}>
       <StatusBar style="light" />
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         <Stack.Navigator
           screenOptions={{
             headerShown: false,
@@ -128,6 +189,11 @@ export default function App() {
             // Contractor Core Flow
             <Stack.Screen name="ContractorCore">
               {(props) => <ContractorDashboard {...props} user={user} onLogout={handleLogout} />}
+            </Stack.Screen>
+          ) : user.role === 'client' ? (
+            // Client Core Flow
+            <Stack.Screen name="ClientCore">
+              {(props) => <ClientDashboard {...props} user={user} onLogout={handleLogout} />}
             </Stack.Screen>
           ) : (
             // Worker Flow (Stack container)

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import backScrollEmitter from '../../utils/backScrollEmitter';
 import {
   View,
   Text,
@@ -12,11 +13,14 @@ import {
   Animated,
   Platform,
   Image,
-  BackHandler
+  BackHandler,
+  Modal
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../../theme/colors';
 import { contractorAPI, getBaseUrl, gpsAPI } from '../../api/client';
 import CustomInput from '../../components/CustomInput';
+import CustomButton from '../../components/CustomButton';
 import AppFooter from '../../components/AppFooter';
 import io from 'socket.io-client';
 import MapViewContainer from '../../components/MapViewContainer';
@@ -27,8 +31,55 @@ import * as Location from 'expo-location';
 const NY_LAT = 40.7128;
 const NY_LNG = -73.9786;
 
+const CATEGORY_OPTIONS = [
+  { id: 'Cleaning', label: 'Cleaning', icon: '🧹' },
+  { id: 'Plumbing', label: 'Plumbing', icon: '🔧' },
+  { id: 'Electrical', label: 'Electrical', icon: '⚡' },
+  { id: 'Carpentry', label: 'Carpentry', icon: '🪚' },
+  { id: 'Gardening', label: 'Gardening', icon: '🌱' },
+  { id: 'Construction', label: 'Construction', icon: '🏗️' },
+  { id: 'HVAC', label: 'HVAC', icon: '❄️' },
+  { id: 'Moving', label: 'Moving', icon: '📦' },
+  { id: 'Others', label: 'Others', icon: '➕' }
+];
+
+const getDaysInMonth = (date) => {
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const startDay = firstDay.getDay(); 
+  
+  const days = [];
+  for (let i = 0; i < startDay; i++) {
+    days.push(null);
+  }
+  for (let i = 1; i <= daysInMonth; i++) {
+    days.push(new Date(year, month, i));
+  }
+  return days;
+};
+
 const ContractorDashboard = ({ user, onLogout }) => {
+  const [profileUser, setProfileUser] = useState(user);
+  const [subscription, setSubscription] = useState(null);
   const [activeTab, setActiveTab] = useState('projects'); // 'projects', 'newContract', 'gps'
+
+  // ── Onboarding Flow States ──
+  const [onboardingStep, setOnboardingStep] = useState(1); // 1 = Select Plan, 2 = Select Crew, null = Completed/Dashboard
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [hasOnboarded, setHasOnboarded] = useState(false);
+
+  // ── Payment Modal Wizard States ──
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [paymentStep, setPaymentStep] = useState('SELECT_METHOD'); // 'SELECT_METHOD', 'PAYPAL_LOGIN', 'PAYPAL_CONFIRM', 'PAYPAL_SUCCESS', 'CREDIT_CARD', 'CARD_SUCCESS'
+  const [paypalEmail, setPaypalEmail] = useState('');
+  const [paypalPassword, setPaypalPassword] = useState('');
+  const [cardholderName, setCardholderName] = useState('John Smith');
+  const [cardNumber, setCardNumber] = useState('1234 5678 9012 3456');
+  const [expiryDate, setExpiryDate] = useState('MM/YY');
+  const [cvv, setCvv] = useState('123');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   // ── Packages & Contracts State ──────────────────────────────────────────────
   const [packages, setPackages] = useState([]);
@@ -38,8 +89,8 @@ const ContractorDashboard = ({ user, onLogout }) => {
   const [loading, setLoading] = useState(false);
 
   // ── Contract Form State ─────────────────────────────────────────────────────
-  const [clientName, setClientName] = useState('');
-  const [clientPhone, setClientPhone] = useState('');
+  const [clientName, setClientName] = useState(user?.companyName || '');
+  const [clientPhone, setClientPhone] = useState(user?.phoneNumber || '');
   const [clientCountryCode, setClientCountryCode] = useState('+94');
   const [address, setAddress] = useState('');
   const [latitude, setLatitude] = useState(NY_LAT.toString());
@@ -75,6 +126,37 @@ const ContractorDashboard = ({ user, onLogout }) => {
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const [tabHistory, setTabHistory] = useState(['projects']);
+  const scrollRef = useRef(null);
+
+  // --- Crew Roster Tab States ---
+  const [rosterWorkers, setRosterWorkers] = useState([]);
+  const [searchWorkerEmail, setSearchWorkerEmail] = useState('');
+  const [foundWorkerList, setFoundWorkerList] = useState([]);
+  const [selectedRosterWorker, setSelectedRosterWorker] = useState(null);
+  const [workerProfileStats, setWorkerProfileStats] = useState(null);
+  const [workerProfilePeriod, setWorkerProfilePeriod] = useState('week'); // 'week', 'month', '3months'
+  const [workerProfileJobs, setWorkerProfileJobs] = useState([]);
+  const [loadingWorkerProfile, setLoadingWorkerProfile] = useState(false);
+  const [handoverContractId, setHandoverContractId] = useState('');
+  const [showHandoverDropdown, setShowHandoverDropdown] = useState(false);
+  const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
+  const [assigningWorker, setAssigningWorker] = useState(false);
+
+  useEffect(() => {
+    const listener = (markHandled) => {
+      try {
+        if (scrollRef.current && scrollRef.current.scrollTo) {
+          scrollRef.current.scrollTo({ y: 0, animated: true });
+          markHandled();
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    const unsub = backScrollEmitter.subscribe(listener);
+    return () => unsub();
+  }, []);
 
   const fadeTransition = (cb) => {
     Animated.timing(fadeAnim, {
@@ -89,6 +171,62 @@ const ContractorDashboard = ({ user, onLogout }) => {
         useNativeDriver: false
       }).start();
     });
+  };
+
+  const navigateToTab = (nextTab) => {
+    if (!nextTab || nextTab === activeTab) return;
+    if (showCalendarModal) {
+      setShowCalendarModal(false);
+    }
+    if (nextTab !== 'roster' && selectedRosterWorker) {
+      setSelectedRosterWorker(null);
+    }
+    setTabHistory((prev) => {
+      if (prev[prev.length - 1] === nextTab) return prev;
+      return [...prev, nextTab];
+    });
+    setActiveTab(nextTab);
+  };
+
+  const goBack = () => {
+    if (activeTab === 'roster' && selectedRosterWorker) {
+      setSelectedRosterWorker(null);
+      setActiveTab('projects');
+      return true;
+    }
+
+    if (activeTab === 'newContract' && selectedRosterWorker) {
+      setSelectedRosterWorker(null);
+      setTabHistory((prev) => prev.length > 1 ? prev.slice(0, -1) : prev);
+      setActiveTab('projects');
+      return true;
+    }
+
+    if (activeTab === 'newContract' && selectedPackage !== null) {
+      fadeTransition(() => {
+        setSelectedPackage(null);
+        setActiveTab('projects');
+        setTabHistory((prev) => {
+          const history = [...prev];
+          if (history[history.length - 1] !== 'projects') history.push('projects');
+          return history;
+        });
+      });
+      return true;
+    }
+
+    if (activeTab !== 'projects' && tabHistory.length > 1) {
+      setTabHistory((prev) => {
+        const history = [...prev];
+        history.pop();
+        const previousTab = history[history.length - 1] || 'projects';
+        setActiveTab(previousTab);
+        return history;
+      });
+      return true;
+    }
+
+    return false;
   };
 
   // ── Reverse Geocode Handler (coordinates -> English address) ──
@@ -202,9 +340,30 @@ const ContractorDashboard = ({ user, onLogout }) => {
     }
   };
 
+  useEffect(() => {
+    setProfileUser(user);
+  }, [user]);
+
+  const formatPlanRenewalText = (pkgName, price) => {
+    if (subscription && subscription.packageName === pkgName && subscription.renewsOn) {
+      const renewDate = new Date(subscription.renewsOn).toLocaleDateString();
+      if (subscription.planAutoRenew) {
+        return `Auto-renews on ${renewDate} • $${price}/month`;
+      }
+      return `Expires on ${renewDate} • auto-renew off`;
+    }
+    return `Billed monthly • $${price}/month • renews after 30 days`;
+  };
+
   const loadInitialData = async () => {
     try {
       setRefreshing(true);
+      const subRes = await contractorAPI.getSubscription();
+      if (subRes.success) {
+        setSubscription(subRes.subscription);
+        if (subRes.user) setProfileUser(subRes.user);
+      }
+
       const pkgRes = await contractorAPI.getPackages();
       if (pkgRes.success) setPackages(pkgRes.packages);
 
@@ -228,6 +387,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
           }
         }
       }
+      await fetchRoster();
       setRefreshing(false);
     } catch (e) {
       setRefreshing(false);
@@ -235,9 +395,46 @@ const ContractorDashboard = ({ user, onLogout }) => {
     }
   };
 
+  const onboardingStorageKey = user ? `contractorOnboarded:${user._id || user.id}` : 'contractorOnboarded';
+
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  useEffect(() => {
+    const loadOnboardingStatus = async () => {
+      if (!user) return;
+      try {
+        const value = await AsyncStorage.getItem(onboardingStorageKey);
+        setHasOnboarded(value === 'true');
+      } catch (e) {
+        console.warn('Failed to load onboarding status:', e.message);
+      }
+    };
+    loadOnboardingStatus();
+  }, [user, onboardingStorageKey]);
+
+  useEffect(() => {
+    if (packages.length > 0 && user) {
+      const userPkgId = user.packageId?._id || user.packageId;
+      const userHasPlan = !!userPkgId;
+      const currentPkg = packages.find(p => p._id === userPkgId);
+      if (currentPkg) {
+        setSelectedPackage(currentPkg);
+      }
+
+      // If user already has a plan, go directly to dashboard (skip onboarding)
+      if (userHasPlan) {
+        setOnboardingStep(null);
+      } else if (hasOnboarded) {
+        // User has completed onboarding but no plan - go to dashboard
+        setOnboardingStep(null);
+      } else {
+        // First time login - show package selection
+        setOnboardingStep(1);
+      }
+    }
+  }, [packages, user, hasOnboarded, onboardingStorageKey]);
 
   useEffect(() => {
     if (selectedContractForMap) {
@@ -254,38 +451,43 @@ const ContractorDashboard = ({ user, onLogout }) => {
           const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
           const { latitude: currentLat, longitude: currentLng } = location.coords;
           
-          setLatitude(currentLat.toString());
-          setLongitude(currentLng.toString());
-          // Auto reverse-geocode device coordinates
-          handleReverseGeocode(currentLat, currentLng);
+          if (activeTab === 'newContract') {
+            setLatitude(currentLat.toString());
+            setLongitude(currentLng.toString());
+            // Auto reverse-geocode device coordinates
+            handleReverseGeocode(currentLat, currentLng);
+          } else if (activeTab === 'freelance') {
+            setFreelanceLatitude(currentLat.toString());
+            setFreelanceLongitude(currentLng.toString());
+            // Auto reverse-geocode device coordinates
+            handleFreelanceReverseGeocode(currentLat, currentLng);
+          }
         }
       } catch (err) {
         console.warn('Error fetching device location for Contractor Dashboard:', err.message);
       }
     };
 
-    if (activeTab === 'newContract') {
+    if (activeTab === 'newContract' || activeTab === 'freelance') {
       fetchCurrentLocation();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (showCalendarModal) {
+      setShowCalendarModal(false);
     }
   }, [activeTab]);
 
   // Handle hardware back press (Android)
   useEffect(() => {
-    const backAction = () => {
-      if (activeTab === 'newContract' && selectedPackage !== null) {
-        fadeTransition(() => setSelectedPackage(null));
-        return true; // prevent default behavior
-      }
-      return false; // run default behavior
-    };
-
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
-      backAction
+      () => goBack()
     );
 
     return () => backHandler.remove();
-  }, [activeTab, selectedPackage]);
+  }, [activeTab, selectedPackage, selectedRosterWorker, tabHistory]);
 
   // ── Socket.IO Real-time Listener ────────────────────────────────────────────
   useEffect(() => {
@@ -440,6 +642,171 @@ const ContractorDashboard = ({ user, onLogout }) => {
     setSearchSuggestions([]);
   };
 
+  // ── Freelance Reverse Geocode Handler (coordinates -> English address) ──
+  const handleFreelanceReverseGeocode = async (lat, lng) => {
+    try {
+      const response = await fetch(
+        `https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}&lang=en`
+      );
+      const data = await response.json();
+      if (data && data.features && data.features.length > 0) {
+        const props = data.features[0].properties || {};
+        const parts = [];
+        if (props.name) parts.push(props.name);
+        if (props.housenumber) parts.push(props.housenumber);
+        if (props.street) parts.push(props.street);
+        if (props.district) parts.push(props.district);
+        if (props.city) parts.push(props.city);
+        if (props.state) parts.push(props.state);
+        if (props.postcode) parts.push(props.postcode);
+        if (props.country) parts.push(props.country);
+        
+        let displayName = parts.filter(Boolean).join(', ');
+        
+        displayName = displayName
+          .replace(/ශ්‍රී ලංකාව/g, 'Sri Lanka')
+          .replace(/இலங்கை/g, 'Sri Lanka');
+          
+        setFreelanceLoc(displayName);
+      }
+    } catch (e) {
+      console.warn('Reverse geocoding error for freelance:', e.message);
+    }
+  };
+
+  // ── Freelance Search Place Autocomplete Handlers ──
+  const handleFreelancePlaceSearch = async (query) => {
+    setFreelanceSearchQuery(query);
+    if (query.trim().length < 3) {
+      setFreelanceSearchSuggestions([]);
+      return;
+    }
+
+    try {
+      setFreelanceSearchingPlace(true);
+      const response = await fetch(
+        `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&lang=en`
+      );
+      const data = await response.json();
+      
+      if (data && data.features) {
+        const mapped = data.features.map((feature) => {
+          const props = feature.properties || {};
+          const coords = feature.geometry?.coordinates || [0, 0];
+          
+          const parts = [];
+          if (props.name) parts.push(props.name);
+          if (props.housenumber) parts.push(props.housenumber);
+          if (props.street) parts.push(props.street);
+          if (props.district) parts.push(props.district);
+          if (props.city) parts.push(props.city);
+          if (props.state) parts.push(props.state);
+          if (props.postcode) parts.push(props.postcode);
+          if (props.country) parts.push(props.country);
+          
+          let displayName = parts.filter(Boolean).join(', ');
+          
+          displayName = displayName
+            .replace(/ශ්‍රී ලංකාව/g, 'Sri Lanka')
+            .replace(/இலங்கை/g, 'Sri Lanka');
+          
+          return {
+            lat: coords[1],
+            lon: coords[0],
+            display_name: displayName || 'Unknown Place'
+          };
+        });
+        setFreelanceSearchSuggestions(mapped);
+      } else {
+        setFreelanceSearchSuggestions([]);
+      }
+    } catch (e) {
+      console.warn('Freelance place search autocomplete error:', e.message);
+    } finally {
+      setFreelanceSearchingPlace(false);
+    }
+  };
+
+  const handleFreelanceSelectSuggestion = (item) => {
+    const lat = item.lat;
+    const lon = item.lon;
+    const displayName = item.display_name;
+
+    setFreelanceLatitude(parseFloat(lat).toString());
+    setFreelanceLongitude(parseFloat(lon).toString());
+    setFreelanceLoc(displayName);
+    
+    setFreelanceSearchQuery('');
+    setFreelanceSearchSuggestions([]);
+  };
+
+
+  const handleNewContractTimeBlur = () => {
+    let cleanTime = startTime.trim();
+    if (!cleanTime) {
+      setStartTime('09:00');
+      return;
+    }
+    
+    // Auto-insert leading zero if format is H:MM
+    const singleHourRegex = /^([0-9]):([0-5][0-9])$/;
+    if (singleHourRegex.test(cleanTime)) {
+      cleanTime = '0' + cleanTime;
+    }
+    
+    // If it's just a single or double digit hour (e.g., "9" or "14"), auto-format to HH:00
+    const hourOnlyRegex = /^([0-9]|0[0-9]|1[0-9]|2[0-3])$/;
+    if (hourOnlyRegex.test(cleanTime)) {
+      let hr = cleanTime;
+      if (hr.length === 1) hr = '0' + hr;
+      cleanTime = hr + ':00';
+    }
+
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(cleanTime)) {
+      Alert.alert(
+        'Invalid Time Format',
+        'Time must be in 24-hour HH:MM format (e.g., 09:00 or 17:30). Reverting to default (09:00).'
+      );
+      setStartTime('09:00');
+    } else {
+      setStartTime(cleanTime);
+    }
+  };
+
+  const handleFreelanceTimeBlur = () => {
+    let cleanTime = freelanceTime.trim();
+    if (!cleanTime) {
+      setFreelanceTime('09:00');
+      return;
+    }
+    
+    // Auto-insert leading zero if format is H:MM
+    const singleHourRegex = /^([0-9]):([0-5][0-9])$/;
+    if (singleHourRegex.test(cleanTime)) {
+      cleanTime = '0' + cleanTime;
+    }
+    
+    // If it's just a single or double digit hour (e.g., "9" or "14"), auto-format to HH:00
+    const hourOnlyRegex = /^([0-9]|0[0-9]|1[0-9]|2[0-3])$/;
+    if (hourOnlyRegex.test(cleanTime)) {
+      let hr = cleanTime;
+      if (hr.length === 1) hr = '0' + hr;
+      cleanTime = hr + ':00';
+    }
+
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(cleanTime)) {
+      Alert.alert(
+        'Invalid Time Format',
+        'Time must be in 24-hour HH:MM format (e.g., 09:00 or 17:30). Reverting to default (09:00).'
+      );
+      setFreelanceTime('09:00');
+    } else {
+      setFreelanceTime(cleanTime);
+    }
+  };
+
   // ── Worker Search ───────────────────────────────────────────────────────────
   const handleSearchWorkers = async (text) => {
     setWorkerQuery(text);
@@ -476,11 +843,11 @@ const ContractorDashboard = ({ user, onLogout }) => {
         return;
       }
 
-      // 2. Basic package limit verification (max 5 workers)
+      // 2. Basic package limit verification (max 5 crew members)
       if (selectedPackage?.name === 'Basic' && selectedWorkers.length >= 5) {
         Alert.alert(
           'Basic Package Limit',
-          '⚠️ The Basic Package permits a maximum of 5 workers. Please upgrade to the Premium Package to select larger crew sizes.'
+          '⚠️ The Basic Package permits a maximum of 5 crew members. Please upgrade to the Premium Package to select larger crew sizes.'
         );
         return;
       }
@@ -502,14 +869,14 @@ const ContractorDashboard = ({ user, onLogout }) => {
   // ── Submit Contract Dispatch ────────────────────────────────────────────────
   const handleCreateContract = async () => {
     if (!clientName.trim() || !clientPhone.trim() || !address.trim()) {
-      Alert.alert('Required Fields', 'Please complete Client Name, Phone, and Address.');
+      Alert.alert('Required Fields', 'Please complete Contractor Name, Phone, and Address.');
       return;
     }
 
     const fullPhoneNumber = `${clientCountryCode}${clientPhone.trim().replace(/^0/, '')}`;
     const cleanPhone = fullPhoneNumber.replace(/[\s\-().+]/g, '');
     if (cleanPhone.length < 9 || cleanPhone.length > 15) {
-      Alert.alert('Invalid Phone Number', 'Enter a valid client phone number (9–15 digits)');
+      Alert.alert('Invalid Phone Number', 'Enter a valid contractor phone number (9–15 digits)');
       return;
     }
 
@@ -517,8 +884,35 @@ const ContractorDashboard = ({ user, onLogout }) => {
     if (selectedWorkers.length < minCrew) {
       Alert.alert(
         'Insufficient Crew Selected',
-        `Please select at least ${minCrew} available worker(s) to fulfill the requirements of this contract.`
+        `Please select at least ${minCrew} available crew member(s) to fulfill the requirements of this contract.`
       );
+      return;
+    }
+
+    // Validate Duration (Min)
+    const durationNum = parseInt(durationMinutes);
+    if (isNaN(durationNum) || durationNum <= 0) {
+      Alert.alert('Invalid Duration', 'Duration must be a positive number of minutes.');
+      return;
+    }
+
+    // Validate Date format
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(date)) {
+      Alert.alert('Invalid Date', 'Date must be in YYYY-MM-DD format.');
+      return;
+    }
+
+    const selectedDateObj = new Date(date);
+    if (isNaN(selectedDateObj.getTime())) {
+      Alert.alert('Invalid Date', 'Please select a valid date.');
+      return;
+    }
+
+    // Validate Start Time format
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(startTime)) {
+      Alert.alert('Invalid Time', 'Start Time must be in 24-hour HH:MM format (e.g. 09:00 or 17:30).');
       return;
     }
 
@@ -605,6 +999,1697 @@ const ContractorDashboard = ({ user, onLogout }) => {
     return `${minutes}m ${seconds}s`;
   };
 
+  // --- Bidding Tab States ---
+  const [clientRequests, setClientRequests] = useState([]);
+  const [loadingRequests, setLoadingRequests] = useState(false);
+  const [bidPrices, setBidPrices] = useState({});
+
+  // --- Freelance Tab States ---
+  const [freelanceCategory, setFreelanceCategory] = useState('Cleaning');
+  const [freelanceLoc, setFreelanceLoc] = useState('');
+  const [freelanceHours, setFreelanceHours] = useState('4');
+  const [freelancePrice, setFreelancePrice] = useState('25');
+  const [freelanceDate, setFreelanceDate] = useState('2026-06-15');
+  const [freelanceTime, setFreelanceTime] = useState('09:00');
+  const [freelanceDesc, setFreelanceDesc] = useState('');
+  const [freelanceJobs, setFreelanceJobs] = useState([]);
+  const [loadingFreelance, setLoadingFreelance] = useState(false);
+  const [expandedFreelanceId, setExpandedFreelanceId] = useState(null);
+
+  const [showFreelanceCategoryDropdown, setShowFreelanceCategoryDropdown] = useState(false);
+  const [freelanceLatitude, setFreelanceLatitude] = useState(NY_LAT.toString());
+  const [freelanceLongitude, setFreelanceLongitude] = useState(NY_LNG.toString());
+  const [freelanceSearchQuery, setFreelanceSearchQuery] = useState('');
+  const [freelanceSearchSuggestions, setFreelanceSearchSuggestions] = useState([]);
+  const [freelanceSearchingPlace, setFreelanceSearchingPlace] = useState(false);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+  const [currentCalendarMonth, setCurrentCalendarMonth] = useState(new Date());
+  const [calendarTarget, setCalendarTarget] = useState('freelance'); // 'freelance', 'newContract', or 'rosterAssign'
+  const [rosterAssignDate, setRosterAssignDate] = useState('');
+  // --- Public Freelance Tab States ---
+
+
+  // --- API Fetch Handlers ---
+  const fetchRoster = async () => {
+    try {
+      const res = await contractorAPI.getWorkers();
+      if (res.success) setRosterWorkers(res.workers);
+    } catch (e) {
+      console.warn('Failed to fetch roster:', e.message);
+    }
+  };
+
+  const handleGlobalSearchWorkers = async (q) => {
+    setSearchWorkerEmail(q);
+    if (q.trim().length < 3) {
+      setFoundWorkerList([]);
+      return;
+    }
+    try {
+      const res = await contractorAPI.searchWorkers(q);
+      if (res.success) setFoundWorkerList(res.workers);
+    } catch (e) {
+      console.warn('Failed to search workers:', e.message);
+    }
+  };
+
+  const handleAddWorkerToRoster = async (workerId) => {
+    try {
+      const res = await contractorAPI.addWorker(workerId);
+      if (res.success) {
+        Alert.alert('Worker Added! 👤', res.message);
+        setSearchWorkerEmail('');
+        setFoundWorkerList([]);
+        fetchRoster();
+      } else {
+        Alert.alert('Failed to Add', res.message || 'Verification error');
+      }
+    } catch (e) {
+      Alert.alert('Error', e.response?.data?.message || 'Package limit or server error');
+    }
+  };
+
+  const handleSelectPlan = async (pkg) => {
+    setSelectedPackage(pkg);
+    setPaypalEmail('');
+    setPaypalPassword('');
+    setCardholderName('John Smith');
+    setCardNumber('1234 5678 9012 3456');
+    setExpiryDate('MM/YY');
+    setCvv('123');
+    setPaymentStep('SELECT_METHOD');
+    setPaymentModalVisible(true);
+  };
+
+  const handleFinalizePayment = async () => {
+    if (!selectedPackage) return;
+    try {
+      setIsProcessingPayment(true);
+      const res = await contractorAPI.selectPackage(selectedPackage._id);
+      setIsProcessingPayment(false);
+      setPaymentModalVisible(false);
+      if (res.success) {
+        Alert.alert('Plan Selected', `Your ${selectedPackage.name} plan is now active!`);
+        setOnboardingStep(2); // Move to select crew members
+      } else {
+        Alert.alert('Error', res.message || 'Could not select plan');
+      }
+    } catch (e) {
+      setIsProcessingPayment(false);
+      setPaymentModalVisible(false);
+      console.warn('Finalize select plan error:', e.message);
+      setOnboardingStep(2);
+    }
+  };
+
+  const fetchWorkerProfileData = async (workerId, period = workerProfilePeriod) => {
+    setLoadingWorkerProfile(true);
+    try {
+      let startDate = '';
+      let endDate = '';
+      const now = new Date();
+      if (period === 'week') {
+        const pastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+        startDate = pastWeek.toISOString().split('T')[0];
+        endDate = now.toISOString().split('T')[0];
+      } else if (period === 'month') {
+        const pastMonth = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        startDate = pastMonth.toISOString().split('T')[0];
+        endDate = now.toISOString().split('T')[0];
+      } else if (period === '3months') {
+        const past3M = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+        startDate = past3M.toISOString().split('T')[0];
+        endDate = now.toISOString().split('T')[0];
+      }
+      
+      const res = await contractorAPI.getWorkerProfile(workerId, startDate, endDate);
+      if (res.success) {
+        setWorkerProfileStats(res.stats);
+        setWorkerProfileJobs(res.jobs || []);
+        
+        // Load GPS history if worker has an ongoing contract
+        const ongoingContract = contracts.find(c => {
+          const isOngoing = c.status === 'active' || c.status === 'pending';
+          if (!isOngoing) return false;
+          return c.assignments?.some(assign => {
+            const wId = assign.workerId?._id || assign.workerId;
+            return wId && wId.toString() === workerId.toString();
+          });
+        });
+        if (ongoingContract) {
+          fetchGpsHistory(ongoingContract._id, ongoingContract);
+        }
+      }
+      setLoadingWorkerProfile(false);
+    } catch (e) {
+      setLoadingWorkerProfile(false);
+      Alert.alert('Error', 'Failed to fetch crew member profile payouts');
+    }
+  };
+
+  const handleHandoverProject = async (workerId) => {
+    if (!handoverContractId) {
+      Alert.alert('Required', 'Please select a project to handover');
+      return;
+    }
+    setAssigningWorker(true);
+    try {
+      const res = await contractorAPI.assignWorker(workerId, handoverContractId);
+      setAssigningWorker(false);
+      if (res.success) {
+        Alert.alert('Project Handed Over! 🧼', `Crew assignment request successfully dispatched to the worker.`);
+        setHandoverContractId('');
+        fetchWorkerProfileData(workerId);
+        loadInitialData();
+      } else {
+        Alert.alert('Handover Failed', res.message || 'Error occurred');
+      }
+    } catch (e) {
+      setAssigningWorker(false);
+      Alert.alert('Error', e.response?.data?.message || 'Server error handing over contract');
+    }
+  };
+
+  const handleUpgradeSubscription = async () => {
+    try {
+      const res = await contractorAPI.upgradePackage();
+      if (res.success) {
+        Alert.alert('Upgraded! 🚀', 'Successfully upgraded to Premium Package. You can now add up to 50 crew members.');
+        loadInitialData();
+      } else {
+        Alert.alert('Upgrade Failed', res.message);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Server error upgrading package');
+    }
+  };
+
+  const handleToggleAutoRenew = async (currentStatus) => {
+    const targetStatus = !currentStatus;
+    if (targetStatus === false) {
+      const renewDate = subscription?.renewsOn
+        ? new Date(subscription.renewsOn).toLocaleDateString()
+        : 'the end of your billing period';
+      Alert.alert(
+        'Cancel Auto-Renew?',
+        `Your plan stays active until ${renewDate}. After that, no further monthly charge will be made unless you renew manually.`,
+        [
+          { text: 'Keep Auto-Renew', style: 'cancel' },
+          {
+            text: 'Turn Off Auto-Renew',
+            onPress: async () => {
+              try {
+                const res = await contractorAPI.setRenewOption(false);
+                if (res.success) {
+                  Alert.alert('Auto-Renew Off', res.message);
+                  loadInitialData();
+                }
+              } catch (e) {
+                Alert.alert('Error', e.response?.data?.message || 'Failed to update renew option');
+              }
+            }
+          }
+        ]
+      );
+    } else {
+      try {
+        const res = await contractorAPI.setRenewOption(true);
+        if (res.success) {
+          Alert.alert('Auto-Renew Enabled', res.message);
+          loadInitialData(); // Refresh user state
+        }
+      } catch (e) {
+        Alert.alert('Error', e.response?.data?.message || 'Failed to update renew option');
+      }
+    }
+  };
+
+  const handleRenewSubscriptionNow = async () => {
+    try {
+      const res = await contractorAPI.renewPackage();
+      if (res.success) {
+        Alert.alert('Subscription Renewed! 🚀', 'Successfully renewed subscription plan for another 30 days.');
+        loadInitialData(); // Refresh user state
+      }
+    } catch (e) {
+      Alert.alert('Error', e.response?.data?.message || 'Failed to renew subscription');
+    }
+  };
+
+  const fetchClientRequests = async () => {
+    setLoadingRequests(true);
+    try {
+      const res = await contractorAPI.getClientRequests();
+      if (res.success) setClientRequests(res.requests);
+      setLoadingRequests(false);
+    } catch (e) {
+      setLoadingRequests(false);
+      console.warn('Failed to load client requests:', e.message);
+    }
+  };
+
+  const handleSubmitBid = async (requestId) => {
+    const price = bidPrices[requestId];
+    if (!price || isNaN(price)) {
+      Alert.alert('Required', 'Please enter a valid price bid');
+      return;
+    }
+    try {
+      const res = await contractorAPI.submitOffer(requestId, price);
+      if (res.success) {
+        Alert.alert('Bid Submitted! 💸', 'Your price offer has been successfully dispatched to the client.');
+        setBidPrices(prev => ({ ...prev, [requestId]: '' }));
+        fetchClientRequests();
+      } else {
+        Alert.alert('Bid Failed', res.message);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Server error submitting price offer');
+    }
+  };
+
+  const fetchFreelanceJobs = async () => {
+    setLoadingFreelance(true);
+    try {
+      const res = await contractorAPI.getFreelanceJobs();
+      if (res.success) setFreelanceJobs(res.freelanceJobs);
+      setLoadingFreelance(false);
+    } catch (e) {
+      setLoadingFreelance(false);
+      console.warn('Failed to load freelance jobs:', e.message);
+    }
+  };
+
+  const handlePostFreelanceJob = async () => {
+    if (!freelanceLoc.trim() || !freelanceHours.trim() || !freelanceDate.trim() || !freelanceTime.trim() || !freelanceDesc.trim()) {
+      Alert.alert('Required Fields', 'Please fill out all freelance details.');
+      return;
+    }
+
+    const hoursNum = parseFloat(freelanceHours);
+    if (isNaN(hoursNum) || hoursNum <= 0) {
+      Alert.alert('Invalid Duration', 'Duration must be a positive number of hours.');
+      return;
+    }
+
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(freelanceDate)) {
+      Alert.alert('Invalid Date', 'Date must be in YYYY-MM-DD format.');
+      return;
+    }
+
+    const selectedDateObj = new Date(freelanceDate);
+    if (isNaN(selectedDateObj.getTime())) {
+      Alert.alert('Invalid Date', 'Please select a valid date.');
+      return;
+    }
+
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(freelanceTime)) {
+      Alert.alert('Invalid Time', 'Time must be in 24-hour HH:MM format (e.g. 09:00 or 17:30).');
+      return;
+    }
+
+    try {
+      const res = await contractorAPI.postFreelanceJob({
+        category: freelanceCategory,
+        location: freelanceLoc.trim(),
+        hours: hoursNum,
+        pricePerHour: parseFloat(freelancePrice) || 25,
+        date: freelanceDate,
+        time: freelanceTime,
+        description: freelanceDesc.trim(),
+        targetType: 'crew'
+      });
+      if (res.success) {
+        Alert.alert('Job Posted! 🚀', 'Freelance job opening successfully posted to the Crew Member freelance board.');
+        setFreelanceLoc('');
+        setFreelanceDesc('');
+        setFreelanceSearchQuery('');
+        setFreelanceSearchSuggestions([]);
+        fetchFreelanceJobs();
+      } else {
+        Alert.alert('Post Failed', res.message);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Server error posting freelance job');
+    }
+  };
+
+
+
+  const handleApproveFreelancer = async (jobId, workerId) => {
+    try {
+      const res = await contractorAPI.approveFreelancer(jobId, workerId);
+      if (res.success) {
+        Alert.alert('Worker Approved! 🧼', 'Applicant approved. Project created and scheduled.');
+        fetchFreelanceJobs();
+        fetchRoster();
+        loadInitialData();
+      } else {
+        Alert.alert('Approval Failed', res.message);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Server error approving worker');
+    }
+  };
+
+  // Switch tab loader hook
+  useEffect(() => {
+    if (activeTab === 'roster') {
+      fetchRoster();
+    } else if (activeTab === 'clientRequests') {
+      fetchClientRequests();
+    } else if (activeTab === 'freelance') {
+      fetchFreelanceJobs();
+    }
+  }, [activeTab]);
+
+  // Tab 4: Roster rendering helper
+  const renderRosterTab = () => {
+    const currentPkgName = packages.find(p => p._id === (profileUser?.packageId?._id || profileUser?.packageId))?.name || subscription?.packageName || 'Basic';
+    const limit = currentPkgName === 'Premium' ? 50 : 5;
+
+    if (selectedRosterWorker) {
+      const stats = workerProfileStats || { totalJobsCount: 0, completedJobsCount: 0, totalHours: 0, totalPayout: 0, hourlyRate: 25 };
+      const completedJobs = workerProfileJobs.filter(j => j.status === 'completed');
+      
+      // Filter ongoing projects (pending/active status) assigned to this worker
+      const workerOngoingProjects = contracts.filter(c => {
+        const isOngoing = c.status === 'active' || c.status === 'pending';
+        if (!isOngoing) return false;
+        return c.assignments?.some(assign => {
+          const workerId = assign.workerId?._id || assign.workerId;
+          return workerId && workerId.toString() === selectedRosterWorker._id.toString();
+        });
+      });
+
+      // Filter eligible contracts (pending/active status) not yet assigned to this worker
+      const eligibleContracts = contracts.filter(c => {
+        const isOngoing = c.status === 'active' || c.status === 'pending';
+        if (!isOngoing) return false;
+        const alreadyAssigned = c.assignments?.some(assign => {
+          const workerId = assign.workerId?._id || assign.workerId;
+          return workerId && workerId.toString() === selectedRosterWorker._id.toString();
+        });
+        return !alreadyAssigned;
+      });
+
+      return (
+        <View style={styles.profileCard}>
+          <View style={styles.profileHeader}>
+            <Text style={styles.profileName}>{selectedRosterWorker.name}</Text>
+            {selectedRosterWorker.workerIdNumber && (
+              <Text style={styles.profileIdBadge}>ID: {selectedRosterWorker.workerIdNumber}</Text>
+            )}
+            <Text style={styles.profileContact}>✉️ Email: {selectedRosterWorker.email}</Text>
+            <Text style={styles.profileContact}>📞 Phone: {selectedRosterWorker.phoneNumber}</Text>
+            <Text style={styles.profileContact}>🛠️ Capabilities: {selectedRosterWorker.tags?.join(', ') || 'N/A'}</Text>
+            <Text style={styles.profileContact}>📍 State: {selectedRosterWorker.state || 'N/A'}</Text>
+          </View>
+
+          {/* Assign Job button */}
+          <TouchableOpacity
+            style={styles.assignJobBtn}
+            activeOpacity={0.8}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            pointerEvents="auto"
+            onPress={() => {
+              setSelectedWorkers([selectedRosterWorker]);
+              const currentPkg = packages.find(p => p._id === (user?.packageId?._id || user?.packageId)) || packages[0] || null;
+              setSelectedPackage(currentPkg);
+              if (currentPkg && currentPkg.name === 'Premium') {
+                setRequiredWorkersCount(1);
+              }
+              fadeTransition(() => navigateToTab('newContract'));
+            }}
+          >
+            <Text style={styles.assignJobBtnText}>➕ Assign Job to Crew Member</Text>
+          </TouchableOpacity>
+
+          {/* Ongoing Projects Section */}
+          <View style={styles.profileSection}>
+            <Text style={styles.profileSectionTitle}>Ongoing projects:</Text>
+            {workerOngoingProjects.length === 0 ? (
+              <Text style={styles.emptySectionText}>No ongoing projects assigned.</Text>
+            ) : (
+              workerOngoingProjects.map(c => (
+                <View key={c._id} style={styles.miniProjectCard}>
+                  <Text style={styles.miniProjectTitle}>🧹 {c.clientName}</Text>
+                  <Text style={styles.miniProjectSub}>📍 Location: {c.location?.address}</Text>
+                  <Text style={styles.miniProjectSub}>📅 Date: {new Date(c.schedule?.date).toLocaleDateString()}</Text>
+                </View>
+              ))
+            )}
+          </View>
+
+          {/* Hand Over a Project Section */}
+          <View style={styles.profileSection}>
+            <Text style={styles.profileSectionTitle}>Hand over a project:</Text>
+            {eligibleContracts.length === 0 ? (
+              <Text style={styles.emptySectionText}>No eligible projects available to hand over.</Text>
+            ) : (
+              <View style={{ position: 'relative', zIndex: 30 }}>
+                <TouchableOpacity
+                  style={styles.handoverSelectBox}
+                  onPress={() => setShowHandoverDropdown(!showHandoverDropdown)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.handoverSelectText}>
+                    {handoverContractId ? 
+                      contracts.find(c => c._id === handoverContractId)?.clientName || 'Selected Project' : 
+                      'Select a project to assign'
+                    }
+                  </Text>
+                  <Text style={styles.dropdownArrowIcon}>{showHandoverDropdown ? '▲' : '▼'}</Text>
+                </TouchableOpacity>
+
+                {showHandoverDropdown && (
+                  <View style={styles.handoverDropdownMenu}>
+                    <ScrollView nestedScrollEnabled style={{ maxHeight: 150 }}>
+                      {eligibleContracts.map((c) => (
+                        <TouchableOpacity
+                          key={c._id}
+                          style={styles.handoverDropdownItem}
+                          onPress={() => {
+                            setHandoverContractId(c._id);
+                            setShowHandoverDropdown(false);
+                          }}
+                        >
+                          <Text style={styles.handoverDropdownItemText} numberOfLines={1}>
+                            {c.clientName} ({new Date(c.schedule?.date).toLocaleDateString()})
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {handoverContractId ? (
+                  <TouchableOpacity
+                    style={styles.handoverSubmitBtn}
+                    onPress={() => handleHandoverProject(selectedRosterWorker._id)}
+                    disabled={assigningWorker}
+                  >
+                    <Text style={styles.handoverSubmitBtnText}>
+                      {assigningWorker ? "Assigning..." : "Assign Crew Member ➔"}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
+            )}
+          </View>
+
+          {/* Real-time GPS Track details inside profile */}
+          <View style={styles.profileSection}>
+            <Text style={styles.profileSectionTitle}>Real-time GPS Tracking details:</Text>
+            {(() => {
+              const activeContract = contracts.find(c => {
+                const isOngoing = c.status === 'active' || c.status === 'pending';
+                if (!isOngoing) return false;
+                return c.assignments?.some(assign => {
+                  const wId = assign.workerId?._id || assign.workerId;
+                  return wId && wId.toString() === selectedRosterWorker._id.toString();
+                });
+              });
+
+              if (!activeContract) {
+                return (
+                  <Text style={styles.emptySectionText}>
+                    No active contract in progress. Assign a project to start GPS tracking.
+                  </Text>
+                );
+              }
+
+              const liveInfo = liveWorkers[selectedRosterWorker._id] || {};
+              const lat = liveInfo.lat || activeContract.location?.coordinates?.lat || NY_LAT;
+              const lng = liveInfo.lng || activeContract.location?.coordinates?.lng || NY_LNG;
+
+              return (
+                <View>
+                  <View style={styles.profileGpsCard}>
+                    <Text style={styles.profileGpsTitle}>🛰️ Live Telemetry ({activeContract.clientName})</Text>
+                    <View style={styles.profileGpsGrid}>
+                      <View style={styles.profileGpsCol}>
+                        <Text style={styles.profileGpsLabel}>Status</Text>
+                        <Text style={styles.profileGpsVal}>{liveInfo.status || 'Offline'}</Text>
+                      </View>
+                      <View style={styles.profileGpsCol}>
+                        <Text style={styles.profileGpsLabel}>Distance to Site</Text>
+                        <Text style={styles.profileGpsVal}>
+                          {liveInfo.distanceToClient !== undefined ? `${liveInfo.distanceToClient} meters` : 'N/A'}
+                        </Text>
+                      </View>
+                      <View style={styles.profileGpsCol}>
+                        <Text style={styles.profileGpsLabel}>Geofence Violations</Text>
+                        <Text style={[styles.profileGpsVal, { color: liveInfo.totalViolations > 0 ? '#EF4444' : '#10B981' }]}>
+                          {liveInfo.totalViolations || 0}
+                        </Text>
+                      </View>
+                      <View style={styles.profileGpsCol}>
+                        <Text style={styles.profileGpsLabel}>Time Outside Geofence</Text>
+                        <Text style={styles.profileGpsVal}>
+                          {liveInfo.timeSpentOutsideMinutes || 0} mins
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  <Text style={styles.radarLabel}>🛰️ Dispatch Tracking Radar: {selectedRosterWorker.name}</Text>
+                  <MapViewContainer
+                    clientCoords={[activeContract.location?.coordinates?.lng || NY_LNG, activeContract.location?.coordinates?.lat || NY_LAT]}
+                    workerCoords={[lng, lat]}
+                    clientName={activeContract.clientName}
+                    workerName={selectedRosterWorker.name}
+                    geofenceRadius={50}
+                    geofenceStatus={liveInfo.status === 'Left Work Area' ? 'outside_breach' : 'inside'}
+                    height={200}
+                  />
+                </View>
+              );
+            })()}
+          </View>
+
+          {/* Projects Covered Section */}
+          <View style={[styles.profileSection, { zIndex: 10 }]}>
+            <Text style={styles.profileSectionTitle}>Automated Paysheet (App Calculated):</Text>
+            <Text style={styles.automatedLabel}>⚠️ Payouts are computed automatically based on verified clock-in durations and GPS logs. Overrides or manual calculations by the contractor are disabled.</Text>
+            
+            {/* Period Selection Dropdown */}
+            <View style={{ marginBottom: 14, position: 'relative', zIndex: 20 }}>
+              <TouchableOpacity
+                style={styles.periodSelectBox}
+                onPress={() => setShowPeriodDropdown(!showPeriodDropdown)}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.periodSelectText}>
+                  Period: {workerProfilePeriod === 'week' ? 'Week' : workerProfilePeriod === 'month' ? 'Month' : '3 Months'}
+                </Text>
+                <Text style={styles.dropdownArrowIcon}>{showPeriodDropdown ? '▲' : '▼'}</Text>
+              </TouchableOpacity>
+
+              {showPeriodDropdown && (
+                <View style={styles.periodDropdownMenu}>
+                  {[
+                    { id: 'week', label: 'Week' },
+                    { id: 'month', label: 'Month' },
+                    { id: '3months', label: '3 Months' }
+                  ].map((option) => (
+                    <TouchableOpacity
+                      key={option.id}
+                      style={styles.periodDropdownItem}
+                      onPress={() => {
+                        setWorkerProfilePeriod(option.id);
+                        fetchWorkerProfileData(selectedRosterWorker._id, option.id);
+                        setShowPeriodDropdown(false);
+                      }}
+                    >
+                      <Text style={styles.periodDropdownItemText}>{option.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            {loadingWorkerProfile ? (
+              <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 14 }} />
+            ) : (
+              <View>
+                {/* Completed Jobs Table Header */}
+                <View style={styles.tableHeaderRow}>
+                  <Text style={[styles.tableHeaderCell, { width: '25%' }]}>Client</Text>
+                  <Text style={[styles.tableHeaderCell, { width: '25%' }]}>Location</Text>
+                  <Text style={[styles.tableHeaderCell, { width: '20%' }]}>Date</Text>
+                  <Text style={[styles.tableHeaderCell, { width: '15%', textAlign: 'center' }]}>Hours</Text>
+                  <Text style={[styles.tableHeaderCell, { width: '15%', textAlign: 'right' }]}>Payout</Text>
+                </View>
+
+                {completedJobs.length === 0 ? (
+                  <Text style={styles.emptyTableText}>No completed projects covered in this period.</Text>
+                ) : (
+                  completedJobs.map(job => {
+                    const hours = job.totalHoursWorked || 0;
+                    const payout = parseFloat((hours * stats.hourlyRate).toFixed(2));
+                    return (
+                      <View key={job._id} style={styles.tableBodyRow}>
+                        <Text style={[styles.tableBodyCell, { width: '25%' }]} numberOfLines={1}>{job.customerName}</Text>
+                        <Text style={[styles.tableBodyCell, { width: '25%' }]} numberOfLines={1}>{job.address}</Text>
+                        <Text style={[styles.tableBodyCell, { width: '20%' }]} numberOfLines={1}>
+                          {new Date(job.startTime).toLocaleDateString(undefined, {month: 'numeric', day: 'numeric'})}
+                        </Text>
+                        <Text style={[styles.tableBodyCell, { width: '15%', textAlign: 'center' }]}>{hours}h</Text>
+                        <Text style={[styles.tableBodyCell, { width: '15%', textAlign: 'right', fontWeight: '800', color: '#059669' }]}>
+                          ${payout}
+                        </Text>
+                      </View>
+                    );
+                  })
+                )}
+
+                {/* Total Payout display card underneath */}
+                <View style={styles.totalSummaryBox}>
+                  <Text style={styles.totalSummaryLabel}>Total Amount Earned:</Text>
+                  <Text style={styles.totalSummaryValue}>${stats.totalPayout}</Text>
+                </View>
+              </View>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={() => fadeTransition(() => {
+              setSelectedRosterWorker(null);
+              setActiveTab('projects');
+            })}
+          >
+            <Text style={styles.backBtnText}>← Back to Home</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View>
+        <Text style={styles.rosterTitle}>Crew Members Roster ({rosterWorkers.length} / {limit})</Text>
+
+        {/* Package Card */}
+        <View style={styles.packageCard}>
+          <View style={styles.packageHeader}>
+            <Text style={styles.packageName}>Subscription Tier: {currentPkgName.toUpperCase()}</Text>
+            {currentPkgName === 'Basic' && (
+              <TouchableOpacity style={styles.packageUpgradeBtn} onPress={handleUpgradeSubscription}>
+                <Text style={styles.packageUpgradeText}>Upgrade Premium</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+          <Text style={styles.packageLimitText}>Crew limit: {rosterWorkers.length} of {limit} crew members associated</Text>
+          
+          <View style={styles.priceDivider} />
+          
+          {subscription && subscription.renewsOn && (
+            <View style={{ marginTop: 8 }}>
+              <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600' }}>
+                Plan Status: <Text style={{ color: subscription.planAutoRenew ? '#10B981' : '#F59E0B', fontWeight: '800' }}>
+                  {subscription.planAutoRenew ? 'Active (Auto-Renews Monthly)' : 'Active Until Expiry'}
+                </Text>
+              </Text>
+              <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600', marginTop: 4 }}>
+                {subscription.planAutoRenew ? 'Next Renewal' : 'Expires On'}:{' '}
+                <Text style={{ color: '#0F172A', fontWeight: '800' }}>
+                  {new Date(subscription.renewsOn).toLocaleDateString()}
+                </Text>
+              </Text>
+              <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600', marginTop: 4 }}>
+                Next Charge: <Text style={{ color: '#0F172A', fontWeight: '800' }}>${subscription.nextChargeAmount}/month</Text>
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.packageRenewRow}>
+            <View style={styles.autoRenewToggle}>
+              <Text style={styles.autoRenewLabel}>Auto-Renew:</Text>
+              <TouchableOpacity
+                onPress={() => handleToggleAutoRenew(subscription?.planAutoRenew !== false)}
+              >
+                <Text style={subscription?.planAutoRenew !== false ? styles.autoRenewBadgeActive : styles.autoRenewBadgeInactive}>
+                  {subscription?.planAutoRenew !== false ? '● ON' : '○ OFF'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity 
+              style={styles.renewBtn} 
+              onPress={handleRenewSubscriptionNow}
+            >
+              <Text style={styles.renewBtnText}>Renew Now ➔</Text>
+            </TouchableOpacity>
+          </View>
+
+          {profileUser && profileUser.planTotalBilled > 0 ? (
+            <Text style={styles.earlySelectChargeText}>
+              Total Billed: ${profileUser.planTotalBilled}
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Add Crew search */}
+        <View style={styles.addCrewSection}>
+          <Text style={styles.addCrewTitle}>Hire/Add Crew Member (by email/name)</Text>
+          <View style={styles.addCrewRow}>
+            <TextInput
+              style={styles.addCrewInput}
+              value={searchWorkerEmail}
+              onChangeText={handleGlobalSearchWorkers}
+              placeholder="Enter worker's name or email"
+              placeholderTextColor="#94A3B8"
+            />
+          </View>
+
+          {foundWorkerList.map(w => (
+            <View key={w._id} style={styles.searchResultCard}>
+              <View>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: '#0F172A' }}>{w.name}</Text>
+                <Text style={{ fontSize: 11, color: '#64748B' }}>{w.email}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.approveBtn}
+                onPress={() => handleAddWorkerToRoster(w._id)}
+              >
+                <Text style={styles.approveBtnText}>Add Crew</Text>
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+
+        {/* Worker Roster list */}
+        <View style={styles.rosterGrid}>
+          {rosterWorkers.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyText}>Roster is empty. Search and add crew members above!</Text>
+            </View>
+          ) : (
+            rosterWorkers.map(w => (
+              <TouchableOpacity
+                key={w._id}
+                style={styles.rosterCard}
+                onPress={() => {
+                  setSelectedRosterWorker(w);
+                  fetchWorkerProfileData(w._id);
+                }}
+              >
+                <Text style={styles.workerIdText}>CREW ID: {w.workerIdNumber || w._id.toString().slice(-8).toUpperCase()}</Text>
+                <Text style={styles.workerNameText}>{w.name}</Text>
+                <Text style={styles.workerPhoneText}>✉️ {w.email}  |  📞 {w.phoneNumber}</Text>
+                <Text style={[
+                  styles.workerStatusText,
+                  { color: ['available', 'active_shift'].includes(w.status) ? '#10B981' : '#F59E0B' }
+                ]}>
+                  Roster status: {w.status === 'offline' ? 'OFFLINE' : w.status.toUpperCase()}
+                </Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+      </View>
+    );
+  };
+
+  // Tab 5: Client requests bidding portal rendering helper
+  const renderClientRequestsTab = () => {
+    return (
+      <View>
+        <Text style={styles.rosterTitle}>Client Service Requests Portal</Text>
+        <Text style={styles.sectionSubtitle}>Place bid offers on local client job postings matching your category</Text>
+
+        {loadingRequests ? (
+          <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 20 }} />
+        ) : clientRequests.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>No open client requests matching your business categories and location base.</Text>
+          </View>
+        ) : (
+          clientRequests.map(r => (
+            <View key={r._id} style={styles.clientReqCard}>
+              <View style={styles.clientReqHeader}>
+                <Text style={styles.clientReqCategory}>🧹 {r.category} Request</Text>
+                <View style={styles.priceBadge}>
+                  <Text style={styles.priceBadgeText}>BIDS: {r.offers?.length || 0}</Text>
+                </View>
+              </View>
+              <Text style={styles.clientReqDate}>📅 Scheduled: {new Date(r.date).toLocaleDateString()} at {r.time}</Text>
+              <Text style={styles.clientReqLoc}>📍 Address: {r.location}</Text>
+              <View style={styles.divider} />
+              <Text style={styles.clientReqDesc}>Description: {r.description}</Text>
+              <View style={styles.divider} />
+
+              <View style={styles.bidInputRow}>
+                <TextInput
+                  style={styles.bidInput}
+                  value={bidPrices[r._id] || ''}
+                  onChangeText={(v) => setBidPrices(prev => ({ ...prev, [r._id]: v }))}
+                  placeholder="Enter bid price ($)"
+                  keyboardType="numeric"
+                  placeholderTextColor="#94A3B8"
+                />
+                <TouchableOpacity
+                  style={styles.bidBtn}
+                  onPress={() => handleSubmitBid(r._id)}
+                >
+                  <Text style={styles.bidBtnText}>Submit Bid</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ))
+        )}
+      </View>
+    );
+  };
+
+  // Tab 6: Crew-targeted Freelance board tab rendering helper
+  const renderFreelanceTab = () => {
+    return (
+      <View>
+        <Text style={styles.rosterTitle}>Crew Workforce Shifts (Targeted to Crew Roster)</Text>
+
+        {/* Post Form */}
+        <View style={styles.freelanceForm}>
+          <Text style={styles.freelanceFormTitle}>Post Targeted Shift to Crew Roster</Text>
+          
+          {/* Service Category Dropdown */}
+          <View style={styles.dropdownContainer}>
+            <Text style={styles.fieldLabel}>Service Category <Text style={styles.required}>*</Text></Text>
+            <TouchableOpacity
+              style={styles.dropdownSelectBox}
+              onPress={() => {
+                setShowFreelanceCategoryDropdown(!showFreelanceCategoryDropdown);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.dropdownSelectIcon}>
+                {CATEGORY_OPTIONS.find(c => c.id === freelanceCategory)?.icon || '🛠️'}
+              </Text>
+              <Text style={styles.dropdownSelectText}>
+                {freelanceCategory || 'Select Service Category'}
+              </Text>
+              <Text style={styles.dropdownArrowIcon}>
+                {showFreelanceCategoryDropdown ? '▲' : '▼'}
+              </Text>
+            </TouchableOpacity>
+
+            {showFreelanceCategoryDropdown && (
+              <View style={styles.dropdownMenu}>
+                {CATEGORY_OPTIONS.map((option) => {
+                  const isSelected = freelanceCategory === option.id;
+                  return (
+                    <TouchableOpacity
+                      key={option.id}
+                      style={[styles.dropdownMenuItem, isSelected && styles.dropdownMenuItemActive]}
+                      onPress={() => {
+                        setFreelanceCategory(option.id);
+                        setShowFreelanceCategoryDropdown(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.dropdownMenuItemText}>
+                        {option.icon}  {option.label}
+                      </Text>
+                      {isSelected && (
+                        <Text style={styles.selectedCheckmark}>✓</Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          {/* Search Address (Easiest Method) */}
+          <View style={styles.searchPlaceContainer}>
+            <Text style={styles.fieldGroupLabel}>Search Address/Place (Easiest Method) 🔍</Text>
+            <TextInput
+              style={styles.searchPlaceInput}
+              placeholder="Type place name (e.g. Times Square, Central Park)"
+              value={freelanceSearchQuery}
+              onChangeText={handleFreelancePlaceSearch}
+              placeholderTextColor="#94A3B8"
+            />
+            {freelanceSearchingPlace && (
+              <ActivityIndicator color={Colors.primary} style={{ marginTop: 8 }} />
+            )}
+            {freelanceSearchSuggestions.length > 0 && (
+              <View style={styles.suggestionsBox}>
+                {freelanceSearchSuggestions.map((item, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.suggestionItem}
+                    onPress={() => handleFreelanceSelectSuggestion(item)}
+                  >
+                    <Text style={styles.suggestionText} numberOfLines={1}>
+                      📍 {item.display_name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Google Maps Coordinates Picker */}
+          <Text style={styles.fieldGroupLabel}>Google Maps Location Picker <Text style={{ color: Colors.danger }}>*</Text></Text>
+          <EmbeddedGoogleMap
+            latitude={parseFloat(freelanceLatitude) || NY_LAT}
+            longitude={parseFloat(freelanceLongitude) || NY_LNG}
+            height={220}
+            style={{ borderRadius: 16, marginBottom: 14 }}
+            onLocationSelect={(lat, lng) => {
+              setFreelanceLatitude(lat.toString());
+              setFreelanceLongitude(lng.toString());
+              handleFreelanceReverseGeocode(lat, lng);
+            }}
+          />
+
+          {freelanceLoc ? (
+            <View style={styles.selectedAddressContainer}>
+              <Text style={styles.selectedAddressLabel}>Selected Address: 📍</Text>
+              <Text style={styles.selectedAddressText}>{freelanceLoc}</Text>
+            </View>
+          ) : null}
+
+          {/* Duration (Hours) */}
+          <CustomInput
+            label="Duration (Hours)"
+            value={freelanceHours}
+            onChangeText={setFreelanceHours}
+            placeholder="4"
+            keyboardType="numeric"
+            icon="🕒"
+            required
+          />
+
+          {/* Date and Time row */}
+          <View style={styles.rowFields}>
+            <View style={{ flex: 1 }}>
+              <CustomInput
+                label="Date"
+                value={freelanceDate}
+                placeholder="Select Date"
+                icon="📅"
+                required
+                onPress={() => {
+                  setCalendarTarget('freelance');
+                  setCurrentCalendarMonth(freelanceDate ? new Date(freelanceDate) : new Date());
+                  setShowCalendarModal(true);
+                }}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <CustomInput
+                label="Time"
+                value={freelanceTime}
+                onChangeText={setFreelanceTime}
+                onBlur={handleFreelanceTimeBlur}
+                placeholder="HH:MM"
+                icon="🕒"
+                required
+              />
+            </View>
+          </View>
+
+          <CustomInput
+            label="Job Description"
+            value={freelanceDesc}
+            onChangeText={setFreelanceDesc}
+            placeholder="Dust reception area, mop floors, clean conference tables."
+            icon="📝"
+            multiline
+            numberOfLines={3}
+            required
+          />
+
+          <CustomButton
+            title="Post Targeted Crew Shift"
+            type="primary"
+            onPress={handlePostFreelanceJob}
+          />
+        </View>
+
+        {/* Custom Calendar Picker Modal */}
+        <Modal
+          visible={showCalendarModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowCalendarModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.calendarContainer}>
+              <View style={styles.calendarHeader}>
+                <TouchableOpacity 
+                  onPress={() => {
+                    const prevMonth = new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() - 1, 1);
+                    setCurrentCalendarMonth(prevMonth);
+                  }}
+                  style={styles.calendarNavBtn}
+                >
+                  <Text style={styles.calendarNavBtnText}>◀</Text>
+                </TouchableOpacity>
+                <Text style={styles.calendarMonthTitle}>
+                  {currentCalendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                </Text>
+                <TouchableOpacity 
+                  onPress={() => {
+                    const nextMonth = new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() + 1, 1);
+                    setCurrentCalendarMonth(nextMonth);
+                  }}
+                  style={styles.calendarNavBtn}
+                >
+                  <Text style={styles.calendarNavBtnText}>▶</Text>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.weekdaysRow}>
+                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d, index) => (
+                  <Text key={index} style={styles.weekdayText}>{d}</Text>
+                ))}
+              </View>
+
+              <View style={styles.daysGrid}>
+                {getDaysInMonth(currentCalendarMonth).map((day, index) => {
+                  if (!day) {
+                    return <View key={`empty-${index}`} style={styles.dayCellEmpty} />;
+                  }
+                  
+                  const yyyy = day.getFullYear();
+                  const mm = String(day.getMonth() + 1).padStart(2, '0');
+                  const dd = String(day.getDate()).padStart(2, '0');
+                  const dateStr = `${yyyy}-${mm}-${dd}`;
+                  
+                  const isSelected = calendarTarget === 'newContract'
+                    ? date === dateStr
+                    : calendarTarget === 'rosterAssign'
+                    ? rosterAssignDate === dateStr
+                    : freelanceDate === dateStr;
+                  const isToday = new Date().toDateString() === day.toDateString();
+
+                  return (
+                    <TouchableOpacity
+                      key={dateStr}
+                      style={[
+                        styles.dayCell,
+                        isSelected && styles.dayCellSelected,
+                        isToday && !isSelected && styles.dayCellToday
+                      ]}
+                      onPress={() => {
+                        if (calendarTarget === 'newContract') {
+                          setDate(dateStr);
+                        } else if (calendarTarget === 'rosterAssign') {
+                          setRosterAssignDate(dateStr);
+                        } else {
+                          setFreelanceDate(dateStr);
+                        }
+                        setShowCalendarModal(false);
+                      }}
+                    >
+                      <Text style={[
+                        styles.dayText,
+                        isSelected && styles.dayTextSelected,
+                        isToday && !isSelected && styles.dayTextToday
+                      ]}>
+                        {day.getDate()}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <TouchableOpacity 
+                style={styles.calendarCloseBtn}
+                onPress={() => setShowCalendarModal(false)}
+              >
+                <Text style={styles.calendarCloseBtnText}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Postings List */}
+        <Text style={styles.sectionTitle}>Your Posted Roster Openings ({freelanceJobs.filter(j => j.targetType === 'crew').length})</Text>
+        {loadingFreelance ? (
+          <ActivityIndicator size="small" color={Colors.primary} style={{ marginTop: 20 }} />
+        ) : freelanceJobs.filter(j => j.targetType === 'crew').length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyText}>No crew shifts posted yet.</Text>
+          </View>
+        ) : (
+          freelanceJobs.filter(j => j.targetType === 'crew').map(job => (
+            <View key={job._id} style={styles.freelanceCard}>
+              <TouchableOpacity
+                style={styles.freelanceHeader}
+                onPress={() => setExpandedFreelanceId(expandedFreelanceId === job._id ? null : job._id)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.freelanceCategoryText}>🛠️ {job.category} ({job.hours} hrs @ ${job.pricePerHour}/hr)</Text>
+                  <Text style={styles.freelanceDateText}>📅 Date: {new Date(job.date).toLocaleDateString()} at {job.time}</Text>
+                  <Text style={styles.freelanceDateText}>📍 Location: {job.location}</Text>
+                </View>
+                <View style={[
+                  styles.statusBadge,
+                  job.status === 'open' ? styles.statusPending : styles.statusActive
+                ]}>
+                  <Text style={styles.statusText}>{job.status.toUpperCase()}</Text>
+                </View>
+              </TouchableOpacity>
+
+              {expandedFreelanceId === job._id && (
+                <View style={styles.freelanceDetailsBox}>
+                  <Text style={styles.freelanceDescText}>Description: {job.description}</Text>
+                  <View style={styles.divider} />
+                  
+                  {job.status !== 'open' ? (
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.primary }}>
+                      Accepted Cleaner: {job.approvedWorker?.name} (Shift assigned)
+                    </Text>
+                  ) : (
+                    <Text style={styles.noOffersText}>Waiting for crew members to accept.</Text>
+                  )}
+                </View>
+              )}
+            </View>
+          ))
+        )}
+      </View>
+    );
+  };
+
+
+  const renderOnboardingStep1 = () => {
+    if (packages.length === 0) {
+      return (
+        <View style={{ padding: 40, alignItems: 'center' }}>
+          <ActivityIndicator size="large" color={Colors.primary} />
+          <Text style={{ marginTop: 12, color: '#64748B', fontWeight: '600' }}>Loading plans...</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.onboardingCard}>
+        <Text style={styles.onboardingTitle}>Select Your Dispatch Plan</Text>
+        <Text style={styles.onboardingSubtitle}>
+          Choose the tier that fits your operational needs to continue.
+        </Text>
+
+        <View style={styles.premiumCardsContainer}>
+          {packages.map((pkg) => {
+            const isPremium = pkg.name === 'Premium';
+            const userPkgId = user.packageId?._id || user.packageId;
+            const isSelected = userPkgId === pkg._id;
+            return (
+              <TouchableOpacity
+                key={pkg._id}
+                activeOpacity={0.9}
+                style={[
+                  styles.customPkgCard,
+                  isPremium ? styles.customPkgCardPremium : styles.customPkgCardBasic,
+                  isSelected && styles.pkgCardSelected
+                ]}
+                onPress={() => handleSelectPlan(pkg)}
+              >
+                <View style={isPremium ? styles.pkgBadgePremium : styles.pkgBadgeBasic}>
+                  <Text style={isPremium ? styles.pkgBadgePremiumText : styles.pkgBadgeBasicText}>
+                    {isPremium ? 'ENTERPRISE' : 'STANDARD'}
+                  </Text>
+                </View>
+                <Text style={[styles.pkgNameText, isPremium && { color: '#8B5CF6' }]}>
+                  {pkg.name} Team
+                </Text>
+                <Text style={styles.pkgPriceText}>
+                  ${pkg.price}
+                  <Text style={styles.pkgPriceUnit}>
+                    {isPremium ? ' + $25 / cleaner' : ' / fixed'}
+                  </Text>
+                </Text>
+                <Text style={styles.pkgWorkersText}>
+                  {isPremium ? '✨ Dynamic crew sizing (up to 50)' : '🔒 Maximum 5 cleaners only'}
+                </Text>
+                <View style={styles.pkgFeatures}>
+                  {isPremium ? (
+                    <>
+                      <Text style={styles.pkgFeatureItem}>
+                        <Text style={styles.checkmark}>✓</Text> Dynamic pricing calculations
+                      </Text>
+                      <Text style={styles.pkgFeatureItem}>
+                        <Text style={styles.checkmark}>✓</Text> Real-time active GPS tracking
+                      </Text>
+                      <Text style={styles.pkgFeatureItem}>
+                        <Text style={styles.checkmark}>✓</Text> Priority worker dispatching
+                      </Text>
+                      <Text style={styles.pkgFeatureItem}>
+                        <Text style={styles.checkmark}>✓</Text> 🚨 Urgent support dispatch (5m)
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.pkgFeatureItem}>
+                        <Text style={styles.checkmark}>✓</Text> Simple contract form
+                      </Text>
+                      <Text style={styles.pkgFeatureItem}>
+                        <Text style={styles.checkmark}>✓</Text> Fixed pricing structure
+                      </Text>
+                      <Text style={styles.pkgFeatureItem}>
+                        <Text style={styles.checkmark}>✓</Text> Reliable workforce booking
+                      </Text>
+                      <Text style={styles.pkgFeatureItem}>
+                        <Text style={styles.checkmark}>✓</Text> Standard response times (15m)
+                      </Text>
+                    </>
+                  )}
+                </View>
+                <View style={[styles.pkgSelectBtn, isPremium && styles.pkgSelectBtnPremium]}>
+                  <Text style={[styles.pkgSelectText, isPremium && styles.pkgSelectTextPremium]}>
+                    Select {pkg.name} Plan ➔
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const renderOnboardingStep2 = () => {
+    const currentPkgName = selectedPackage?.name || 'Basic';
+    const limit = currentPkgName === 'Premium' ? 50 : 5;
+
+    return (
+      <View style={styles.onboardingCard}>
+        <Text style={styles.onboardingTitle}>Select Crew Members</Text>
+        <Text style={styles.onboardingSubtitle}>
+          Search and build your crew roster for the {currentPkgName} subscription.
+        </Text>
+
+        <View style={styles.onboardingRosterWrapper}>
+          {/* Subscription Info Banner */}
+          <View style={styles.onboardingPackageCard}>
+            <Text style={styles.onboardingPackageName}>
+              Subscription: {currentPkgName.toUpperCase()}
+            </Text>
+            <Text style={styles.onboardingPackageLimit}>
+              Roster Size: {rosterWorkers.length} of {limit} crew members added
+            </Text>
+          </View>
+
+          {/* Add Crew search */}
+          <View style={styles.addCrewSection}>
+            <Text style={styles.addCrewTitle}>Hire/Add Crew Member (by email/name)</Text>
+            <View style={styles.addCrewRow}>
+              <TextInput
+                style={styles.addCrewInput}
+                value={searchWorkerEmail}
+                onChangeText={handleGlobalSearchWorkers}
+                placeholder="Enter worker's name or email"
+                placeholderTextColor="#94A3B8"
+              />
+            </View>
+
+            {foundWorkerList.map(w => (
+              <View key={w._id} style={styles.searchResultCard}>
+                <View>
+                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#0F172A' }}>{w.name}</Text>
+                  <Text style={{ fontSize: 11, color: '#64748B' }}>{w.email}</Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.approveBtn}
+                  onPress={() => handleAddWorkerToRoster(w._id)}
+                >
+                  <Text style={styles.approveBtnText}>Add Crew</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+
+          {/* Worker Roster list */}
+          <Text style={styles.rosterSectionTitle}>Your Roster ({rosterWorkers.length})</Text>
+          <View style={styles.rosterGrid}>
+            {rosterWorkers.length === 0 ? (
+              <View style={styles.emptyCard}>
+                <Text style={styles.emptyText}>No crew members added yet. Add workers using the search above.</Text>
+              </View>
+            ) : (
+              rosterWorkers.map(w => (
+                <View key={w._id} style={styles.rosterCardCompact}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.workerNameText}>{w.name}</Text>
+                    <Text style={styles.workerPhoneText}>✉️ {w.email}</Text>
+                  </View>
+                  <Text style={styles.workerIdBadgeOnboarding}>
+                    ID: {w.workerIdNumber || w._id.toString().slice(-8).toUpperCase()}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+
+          {/* Next/Finish Button */}
+          <TouchableOpacity
+            style={styles.onboardingFinishBtn}
+            onPress={() => {
+              const finishOnboarding = async () => {
+                try {
+                  await AsyncStorage.setItem(onboardingStorageKey, 'true');
+                  setHasOnboarded(true);
+                } catch (e) {
+                  console.warn('Failed to save onboarding status:', e.message);
+                }
+                setOnboardingStep(null);
+              };
+
+              if (rosterWorkers.length === 0) {
+                Alert.alert(
+                  'No Crew Members',
+                  'You have not added any crew members to your roster. You can add them later via the Roster tab. Do you want to proceed?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Proceed', onPress: finishOnboarding }
+                  ]
+                );
+              } else {
+                finishOnboarding();
+              }
+            }}
+          >
+            <Text style={styles.onboardingFinishBtnText}>Finish Setup & Enter Dashboard ➔</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.onboardingBackBtn}
+            onPress={() => setOnboardingStep(null)}
+          >
+            <Text style={styles.onboardingBackBtnText}>◀ Back to Dashboard</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const renderPaymentModal = () => {
+    if (!paymentModalVisible) return null;
+
+    const handleClose = () => {
+      setPaymentModalVisible(false);
+    };
+
+    const price = selectedPackage?.price || 299;
+    const priceText = `$${price.toFixed(2)}`;
+    const planName = `${selectedPackage?.name || 'Basic'} Team`;
+
+    return (
+      <Modal
+        visible={paymentModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleClose}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            {/* Close button (X) */}
+            <TouchableOpacity style={styles.modalCloseBtn} onPress={handleClose}>
+              <Text style={styles.modalCloseBtnText}>✕</Text>
+            </TouchableOpacity>
+
+            {/* Header info */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalHeaderPaymentTag}>PAYMENT</Text>
+              <Text style={styles.modalHeaderPlanTitle}>{planName}</Text>
+            </View>
+
+            {/* Step Content */}
+            {paymentStep === 'SELECT_METHOD' && (
+              <View style={{ width: '100%' }}>
+                <Text style={styles.modalBodyTitle}>Choose your payment method</Text>
+                
+                <View style={styles.modalPriceContainer}>
+                  <Text style={styles.modalPriceLabel}>Total due today</Text>
+                  <Text style={styles.modalPriceValue}>{priceText}</Text>
+                </View>
+
+                {/* PayPal Button */}
+                <TouchableOpacity
+                  style={styles.paypalBtn}
+                  activeOpacity={0.8}
+                  onPress={() => setPaymentStep('PAYPAL_LOGIN')}
+                >
+                  <Text style={styles.paypalIcon}>P </Text>
+                  <Text style={styles.paypalIconText}>PayPal</Text>
+                  <Text style={styles.paypalBtnText}>Pay with PayPal</Text>
+                </TouchableOpacity>
+
+                {/* or Divider */}
+                <View style={styles.modalDividerRow}>
+                  <View style={styles.modalDividerLine} />
+                  <Text style={styles.modalDividerText}>or</Text>
+                  <View style={styles.modalDividerLine} />
+                </View>
+
+                {/* Credit / Debit Card Button */}
+                <TouchableOpacity
+                  style={styles.cardBtn}
+                  activeOpacity={0.8}
+                  onPress={() => setPaymentStep('CREDIT_CARD')}
+                >
+                  <Text style={{ fontSize: 16 }}>💳 </Text>
+                  <Text style={styles.cardBtnText}>Credit / Debit Card</Text>
+                </TouchableOpacity>
+
+                {/* Card Brand Badges */}
+                <View style={styles.cardLogos}>
+                  <View style={[styles.cardLogoBadge, { backgroundColor: '#1E3A8A' }]}>
+                    <Text style={[styles.cardLogoText, { color: '#FFFFFF' }]}>VISA</Text>
+                  </View>
+                  <View style={[styles.cardLogoBadge, { backgroundColor: '#EA580C' }]}>
+                    <Text style={[styles.cardLogoText, { color: '#FFFFFF' }]}>MC</Text>
+                  </View>
+                  <View style={[styles.cardLogoBadge, { backgroundColor: '#0284C7' }]}>
+                    <Text style={[styles.cardLogoText, { color: '#FFFFFF' }]}>AMEX</Text>
+                  </View>
+                </View>
+
+                <View style={styles.secureFooter}>
+                  <Text style={{ fontSize: 11 }}>🔒 </Text>
+                  <Text style={styles.secureFooterText}>Secured • 256-bit SSL encryption</Text>
+                </View>
+              </View>
+            )}
+
+            {paymentStep === 'PAYPAL_LOGIN' && (
+              <View style={{ width: '100%' }}>
+                {/* PayPal Header Box */}
+                <View style={styles.paypalHeaderLogoBox}>
+                  <Text style={styles.paypalHeaderLogoText}>PayPal</Text>
+                </View>
+
+                <Text style={styles.modalBodyTitle}>Log in to your PayPal account</Text>
+
+                <TextInput
+                  style={styles.paypalInput}
+                  placeholder="Email or mobile number"
+                  placeholderTextColor="#94A3B8"
+                  value={paypalEmail}
+                  onChangeText={setPaypalEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+
+                <TextInput
+                  style={styles.paypalInput}
+                  placeholder="Password"
+                  placeholderTextColor="#94A3B8"
+                  secureTextEntry={true}
+                  value={paypalPassword}
+                  onChangeText={setPaypalPassword}
+                  autoCapitalize="none"
+                />
+
+                <TouchableOpacity
+                  style={styles.paypalLoginBtn}
+                  activeOpacity={0.85}
+                  onPress={() => {
+                    if (!paypalEmail) {
+                      Alert.alert('Required', 'Please enter your PayPal email or phone number.');
+                      return;
+                    }
+                    setPaymentStep('PAYPAL_CONFIRM');
+                  }}
+                >
+                  <Text style={styles.paypalLoginBtnText}>Log In</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.backLinkContainer}
+                  onPress={() => setPaymentStep('SELECT_METHOD')}
+                >
+                  <Text style={styles.backLinkText}>← Back</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {paymentStep === 'PAYPAL_CONFIRM' && (
+              <View style={{ width: '100%' }}>
+                {/* PayPal Header Box */}
+                <View style={styles.paypalHeaderLogoBox}>
+                  <Text style={styles.paypalHeaderLogoText}>PayPal</Text>
+                </View>
+
+                <Text style={styles.modalBodyTitle}>Confirm your payment</Text>
+
+                <View style={styles.confirmBox}>
+                  <View style={styles.confirmRow}>
+                    <Text style={styles.confirmLabel}>Plan</Text>
+                    <Text style={styles.confirmValue}>{planName}</Text>
+                  </View>
+                  <View style={styles.confirmRow}>
+                    <Text style={styles.confirmLabel}>Amount</Text>
+                    <Text style={[styles.confirmValue, { fontWeight: '800' }]}>{priceText} USD</Text>
+                  </View>
+                  <View style={[styles.confirmRow, { borderBottomWidth: 0 }]}>
+                    <Text style={styles.confirmLabel}>PayPal account</Text>
+                    <Text style={styles.confirmValue} numberOfLines={1}>
+                      {paypalEmail || 'nethmihiranya22@gmail.com'}
+                    </Text>
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.paypalPayBtn}
+                  activeOpacity={0.85}
+                  onPress={() => setPaymentStep('PAYPAL_SUCCESS')}
+                >
+                  <Text style={styles.paypalPayBtnText}>Pay {priceText}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.backLinkContainer}
+                  onPress={() => setPaymentStep('PAYPAL_LOGIN')}
+                >
+                  <Text style={styles.backLinkText}>← Back</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {paymentStep === 'PAYPAL_SUCCESS' && (
+              <View style={{ width: '100%', alignItems: 'center' }}>
+                <View style={styles.successCircle}>
+                  <Text style={styles.successCircleText}>✓</Text>
+                </View>
+
+                <Text style={styles.successTitle}>Payment Successful!</Text>
+                <Text style={styles.successDescription}>
+                  Your {planName} plan is now active. A confirmation has been sent to your PayPal email.
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.successActionBtn}
+                  activeOpacity={0.85}
+                  onPress={handleFinalizePayment}
+                >
+                  {isProcessingPayment ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.successActionBtnText}>Continue to Dashboard</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {paymentStep === 'CREDIT_CARD' && (
+              <View style={{ width: '100%' }}>
+                <View style={styles.cardHeaderRow}>
+                  <Text style={{ fontSize: 16 }}>💳 </Text>
+                  <Text style={styles.cardHeaderTitle}>Card Details</Text>
+                </View>
+
+                {/* Amount box */}
+                <View style={styles.cardAmountContainer}>
+                  <Text style={styles.cardAmountLabel}>Amount</Text>
+                  <Text style={styles.cardAmountVal}>{priceText} USD</Text>
+                </View>
+
+                <Text style={styles.cardFieldLabel}>Cardholder Name</Text>
+                <TextInput
+                  style={styles.cardInput}
+                  value={cardholderName}
+                  onChangeText={setCardholderName}
+                  placeholder="John Smith"
+                  placeholderTextColor="#94A3B8"
+                />
+
+                <Text style={styles.cardFieldLabel}>Card Number</Text>
+                <TextInput
+                  style={styles.cardInput}
+                  value={cardNumber}
+                  onChangeText={setCardNumber}
+                  placeholder="1234 5678 9012 3456"
+                  placeholderTextColor="#94A3B8"
+                  keyboardType="numeric"
+                />
+
+                <View style={{ flexDirection: 'row', gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardFieldLabel}>Expiry Date</Text>
+                    <TextInput
+                      style={styles.cardInput}
+                      value={expiryDate}
+                      onChangeText={setExpiryDate}
+                      placeholder="MM/YY"
+                      placeholderTextColor="#94A3B8"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardFieldLabel}>CVV</Text>
+                    <TextInput
+                      style={styles.cardInput}
+                      value={cvv}
+                      onChangeText={setCvv}
+                      placeholder="123"
+                      placeholderTextColor="#94A3B8"
+                      keyboardType="numeric"
+                      secureTextEntry={true}
+                    />
+                  </View>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.cardPayBtn}
+                  activeOpacity={0.85}
+                  onPress={() => setPaymentStep('CARD_SUCCESS')}
+                >
+                  <Text style={styles.cardPayBtnText}>🔒 Pay {priceText}</Text>
+                </TouchableOpacity>
+
+                <View style={styles.secureCardFooter}>
+                  <Text style={styles.secureCardFooterText}>
+                    Secured • 256-bit SSL - Your card data is never stored
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={styles.backLinkContainer}
+                  onPress={() => setPaymentStep('SELECT_METHOD')}
+                >
+                  <Text style={styles.backLinkText}>← Back</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {paymentStep === 'CARD_SUCCESS' && (
+              <View style={{ width: '100%', alignItems: 'center' }}>
+                <View style={styles.successCircle}>
+                  <Text style={styles.successCircleText}>✓</Text>
+                </View>
+
+                <Text style={styles.successTitle}>Payment Successful!</Text>
+                <Text style={styles.successDescription}>
+                  Your {planName} plan is now active. A confirmation has been sent to your email.
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.successActionBtn}
+                  activeOpacity={0.85}
+                  onPress={handleFinalizePayment}
+                >
+                  {isProcessingPayment ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.successActionBtnText}>Continue to Dashboard</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   // Filter for active contracts
   const activeContracts = contracts.filter(c => c.status === 'active' || c.status === 'pending');
 
@@ -631,140 +2716,176 @@ const ContractorDashboard = ({ user, onLogout }) => {
       </View>
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scrollContainer}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
+        keyboardShouldPersistTaps="always"
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={activeTab === 'newContract' ? handleFormRefresh : loadInitialData} tintColor={Colors.primary} />
         }
       >
+      {/* subscribe to global back-scroll emitter */}
         <Animated.View style={{ opacity: fadeAnim }}>
-          {/* ──────────────────────────────────────────────────────────────────
-              TAB 1: PROJECTS (Current Contracts list)
-              ────────────────────────────────────────────────────────────────── */}
-          {activeTab === 'projects' && (
+          {onboardingStep !== null ? (
+            onboardingStep === 1 ? (
+              renderOnboardingStep1()
+            ) : (
+              renderOnboardingStep2()
+            )
+          ) : (
+            <>
+              {/* ──────────────────────────────────────────────────────────────────
+                  TAB 1: PROJECTS (Current Contracts list)
+                  ────────────────────────────────────────────────────────────────── */}
+              {activeTab === 'projects' && (
             <View>
-              <Text style={styles.sectionTitle}>Drafted Cleaning Projects</Text>
-              {contracts.length === 0 ? (
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyIcon}>📂</Text>
-                  <Text style={styles.emptyText}>No contracts drafted yet.</Text>
+              {(() => {
+                const currentPkgName = packages.find(p => p._id === (profileUser?.packageId?._id || profileUser?.packageId))?.name || subscription?.packageName || 'Basic';
+                const limit = currentPkgName === 'Premium' ? 50 : 5;
+                return (
+                  <View>
+                    <Text style={styles.rosterTitle}>Crew Members Roster ({rosterWorkers.length} / {limit})</Text>
+
+                    {/* Subscription Details Card */}
+                    <View style={styles.packageCard}>
+                      <View style={styles.packageHeader}>
+                        <Text style={styles.packageName}>Subscription Tier: {currentPkgName.toUpperCase()}</Text>
+                        {currentPkgName === 'Basic' && (
+                          <TouchableOpacity style={styles.packageUpgradeBtn} onPress={handleUpgradeSubscription}>
+                            <Text style={styles.packageUpgradeText}>Upgrade Premium</Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                      <Text style={styles.packageLimitText}>Crew limit: {rosterWorkers.length} of {limit} crew members associated</Text>
+                      
+                      <View style={styles.priceDivider} />
+                      
+                      {subscription && subscription.renewsOn && (
+                        <View style={{ marginTop: 8 }}>
+                          <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600' }}>
+                            Plan Status: <Text style={{ color: subscription.planAutoRenew ? '#10B981' : '#F59E0B', fontWeight: '800' }}>
+                              {subscription.planAutoRenew ? 'Active (Auto-Renews Monthly)' : 'Active Until Expiry'}
+                            </Text>
+                          </Text>
+                          <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600', marginTop: 4 }}>
+                            {subscription.planAutoRenew ? 'Next Renewal' : 'Expires On'}:{' '}
+                            <Text style={{ color: '#0F172A', fontWeight: '800' }}>
+                              {new Date(subscription.renewsOn).toLocaleDateString()}
+                            </Text>
+                          </Text>
+                          <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600', marginTop: 4 }}>
+                            Next Charge: <Text style={{ color: '#0F172A', fontWeight: '800' }}>${subscription.nextChargeAmount}/month</Text>
+                          </Text>
+                        </View>
+                      )}
+
+                      <View style={styles.packageRenewRow}>
+                        <View style={styles.autoRenewToggle}>
+                          <Text style={styles.autoRenewLabel}>Auto-Renew:</Text>
+                          <TouchableOpacity
+                            onPress={() => handleToggleAutoRenew(subscription?.planAutoRenew !== false)}
+                          >
+                            <Text style={subscription?.planAutoRenew !== false ? styles.autoRenewBadgeActive : styles.autoRenewBadgeInactive}>
+                              {subscription?.planAutoRenew !== false ? '● ON' : '○ OFF'}
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        <TouchableOpacity 
+                          style={styles.renewBtn} 
+                          onPress={handleRenewSubscriptionNow}
+                        >
+                          <Text style={styles.renewBtnText}>Renew Now ➔</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      {profileUser && profileUser.planTotalBilled > 0 ? (
+                        <Text style={styles.earlySelectChargeText}>
+                          Total Billed: ${profileUser.planTotalBilled}
+                        </Text>
+                      ) : null}
+                    </View>
+
+                    {/* Add Crew search */}
+                    <View style={styles.addCrewSection}>
+                      <Text style={styles.addCrewTitle}>Hire/Add Crew Member (by email/name)</Text>
+                      <View style={styles.addCrewRow}>
+                        <TextInput
+                          style={styles.addCrewInput}
+                          value={searchWorkerEmail}
+                          onChangeText={handleGlobalSearchWorkers}
+                          placeholder="Enter worker's name or email"
+                          placeholderTextColor="#94A3B8"
+                        />
+                      </View>
+
+                      {foundWorkerList.map(w => (
+                        <View key={w._id} style={styles.searchResultCard}>
+                          <View>
+                            <Text style={{ fontSize: 13, fontWeight: '800', color: '#0F172A' }}>{w.name}</Text>
+                            <Text style={{ fontSize: 11, color: '#64748B' }}>{w.email}</Text>
+                          </View>
+                          <TouchableOpacity
+                            style={styles.approveBtn}
+                            onPress={() => handleAddWorkerToRoster(w._id)}
+                          >
+                            <Text style={styles.approveBtnText}>Add Crew</Text>
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                );
+              })()}
+
+              {/* Your Crew members Section */}
+              <Text style={styles.sectionTitle}>Your Crew Members</Text>
+              {rosterWorkers.length === 0 ? (
+                <View style={[styles.emptyCard, { marginBottom: 20 }]}>
+                  <Text style={styles.emptyIcon}>👥</Text>
+                  <Text style={styles.emptyText}>No crew members added yet.</Text>
                   <TouchableOpacity
                     style={styles.emptyLinkBtn}
-                    onPress={() => setActiveTab('newContract')}
+                    onPress={() => fadeTransition(() => navigateToTab('roster'))}
                   >
-                    <Text style={styles.emptyLinkText}>Draft Your First Project ➔</Text>
+                    <Text style={styles.emptyLinkText}>Build Your Crew Roster Now ➔</Text>
                   </TouchableOpacity>
                 </View>
               ) : (
-                contracts.map((contract) => (
-                  <View key={contract._id} style={styles.contractCard}>
-                    <View style={styles.contractHeader}>
-                      <View style={{ flex: 1, paddingRight: 10 }}>
-                        <Text style={styles.contractClient}>{contract.clientName}</Text>
-                        <Text style={styles.contractAddress}>📍 {contract.location?.address}</Text>
-                      </View>
-                      <View style={[
-                        styles.statusBadge,
-                        contract.status === 'active' && styles.statusActive,
-                        contract.status === 'completed' && styles.statusCompleted,
-                        contract.status === 'pending' && styles.statusPending
-                      ]}>
-                        <Text style={styles.statusText}>{contract.status.toUpperCase()}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.divider} />
-
-                    <View style={styles.metaInfoRow}>
-                      <View style={styles.metaCol}>
-                        <Text style={styles.metaLabel}>Package Tier</Text>
-                        <Text style={styles.metaValue}>{contract.packageId?.name || 'Basic'}</Text>
-                      </View>
-                      <View style={styles.metaCol}>
-                        <Text style={styles.metaLabel}>Scheduled Date</Text>
-                        <Text style={styles.metaValue}>
-                          {new Date(contract.schedule.date).toLocaleDateString()}
-                        </Text>
-                      </View>
-                      <View style={styles.metaCol}>
-                        <Text style={styles.metaLabel}>Required Crew</Text>
-                        <Text style={styles.metaValue}>{contract.requiredWorkersCount} Cleaners</Text>
-                      </View>
-                    </View>
-
-                    {contract.notes ? (
-                      <Text style={styles.notesText}>📝 Note: {contract.notes}</Text>
-                    ) : null}
-
-                    <View style={styles.divider} />
-
-                    <Text style={styles.workersTitle}>Cleaner Response Logs ({contract.assignments?.length || 0})</Text>
-                    {contract.assignments?.length === 0 ? (
-                      <Text style={styles.noWorkersText}>No workers requested.</Text>
-                    ) : (
-                      contract.assignments?.map((assign) => (
-                        <View key={assign._id} style={styles.workerRow}>
-                          <View style={styles.workerCol}>
-                            <Text style={styles.workerName}>👤 {assign.workerId?.name || 'Cleaner'}</Text>
-                            <Text style={styles.workerPhone}>📞 {assign.workerId?.phoneNumber || 'No Phone'}</Text>
-                            {assign.workerId?.status && (
-                              <Text style={[
-                                styles.workerStatusLabel,
-                                {
-                                  color: ['available', 'active_shift'].includes(assign.workerId.status)
-                                    ? '#10B981' // Green
-                                    : ['busy', 'cleaning', 'on_job'].includes(assign.workerId.status)
-                                    ? '#F59E0B' // Amber
-                                    : '#64748B' // Grey (offline)
-                                }
-                              ]}>
-                                Status: {
-                                  assign.workerId.status === 'active_shift'
-                                    ? 'ACTIVE (ONLINE)'
-                                    : assign.workerId.status === 'available'
-                                    ? 'AVAILABLE'
-                                    : assign.workerId.status === 'offline'
-                                    ? 'OFFLINE'
-                                    : assign.workerId.status === 'busy'
-                                    ? 'BUSY'
-                                    : assign.workerId.status.toUpperCase().replace('_', ' ')
-                                }
-                              </Text>
-                            )}
-                          </View>
-                          <View style={{ alignItems: 'flex-end' }}>
-                            <View style={[
-                              styles.assignBadge,
-                              assign.response === 'accepted' && styles.assignAccepted,
-                              assign.response === 'rejected' && styles.assignRejected,
-                              assign.response === 'pending' && styles.assignPending,
-                              assign.response === 'expired' && styles.assignExpired
-                            ]}>
-                              <Text style={styles.assignText}>{assign.response.toUpperCase()}</Text>
-                            </View>
-                            {assign.response === 'pending' && (
-                              <Text style={styles.countdownText}>🕒 {renderRemainingTime(assign.responseDeadline)}</Text>
-                            )}
-                          </View>
-                        </View>
-                      ))
-                    )}
-
-                    {(contract.status === 'active' || contract.status === 'pending') && (
+                <View style={styles.crewGridContainer}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingBottom: 10 }}>
+                    {rosterWorkers.map((worker) => (
                       <TouchableOpacity
-                        style={styles.mapLinkBtn}
+                        key={worker._id}
+                        style={styles.homeCrewCard}
                         onPress={() => {
-                          setSelectedContractForMap(contract);
-                          setMockProgress(0);
-                          fadeTransition(() => setActiveTab('gps'));
+                          setSelectedRosterWorker(worker);
+                          fetchWorkerProfileData(worker._id);
+                          fadeTransition(() => navigateToTab('roster'));
                         }}
+                        activeOpacity={0.8}
                       >
-                        <Text style={styles.mapLinkBtnText}>📡 Open Live GPS Monitor</Text>
+                        <View style={styles.homeCrewAvatarContainer}>
+                          <Text style={styles.homeCrewAvatarIcon}>👤</Text>
+                          <View style={[
+                            styles.homeCrewStatusDot,
+                            {
+                              backgroundColor: ['available', 'active_shift'].includes(worker.status)
+                                ? '#10B981' // Green
+                                : ['busy', 'cleaning', 'on_job'].includes(worker.status)
+                                ? '#F59E0B' // Amber
+                                : '#64748B' // Grey
+                            }
+                          ]} />
+                        </View>
+                        <Text style={styles.homeCrewName} numberOfLines={1}>{worker.name}</Text>
+                        <Text style={styles.homeCrewId} numberOfLines={1}>
+                          {worker.workerIdNumber || `ID: ${worker._id.slice(-6)}`}
+                        </Text>
                       </TouchableOpacity>
-                    )}
-                  </View>
-                ))
+                    ))}
+                  </ScrollView>
+                </View>
               )}
             </View>
           )}
@@ -774,6 +2895,14 @@ const ContractorDashboard = ({ user, onLogout }) => {
               ────────────────────────────────────────────────────────────────── */}
           {activeTab === 'newContract' && (
             <View>
+              {/* Back to Dashboard Button */}
+              <TouchableOpacity
+                style={styles.backToDashboardBtn}
+                onPress={() => navigateToTab('projects')}
+              >
+                <Text style={styles.backToDashboardBtnText}>← Back to Dashboard</Text>
+              </TouchableOpacity>
+
               {/* ── State A: Package Selection screen ── */}
               {selectedPackage === null ? (
                 <View>
@@ -784,7 +2913,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
                     {/* Basic Card */}
                     <TouchableOpacity
                       activeOpacity={0.9}
-                      style={styles.customPkgCard}
+                      style={[styles.customPkgCard, styles.customPkgCardBasic]}
                       onPress={() => fadeTransition(() => {
                         const basicPkg = packages.find(p => p.name === 'Basic') || { _id: 'mock_basic', name: 'Basic', price: 299 };
                         setSelectedPackage(basicPkg);
@@ -792,16 +2921,25 @@ const ContractorDashboard = ({ user, onLogout }) => {
                       })}
                     >
                       <View style={styles.pkgBadgeBasic}>
-                        <Text style={styles.pkgBadgeText}>STANDARD</Text>
+                        <Text style={styles.pkgBadgeBasicText}>STANDARD</Text>
                       </View>
                       <Text style={styles.pkgNameText}>Basic Team</Text>
-                      <Text style={styles.pkgPriceText}>$299<Text style={styles.pkgPriceUnit}> / fixed</Text></Text>
+                      <Text style={styles.pkgPriceText}>$299<Text style={styles.pkgPriceUnit}> / month</Text></Text>
+                      <Text style={styles.pkgRenewText}>{formatPlanRenewalText('Basic', 299)}</Text>
                       <Text style={styles.pkgWorkersText}>🔒 Maximum 5 cleaners only</Text>
                       <View style={styles.pkgFeatures}>
-                        <Text style={styles.pkgFeatureItem}>✓ Simple contract form</Text>
-                        <Text style={styles.pkgFeatureItem}>✓ Fixed pricing structure</Text>
-                        <Text style={styles.pkgFeatureItem}>✓ Reliable workforce booking</Text>
-                        <Text style={styles.pkgFeatureItem}>✓ Standard response times (15m)</Text>
+                        <Text style={styles.pkgFeatureItem}>
+                          <Text style={styles.checkmark}>✓</Text> Simple contract form
+                        </Text>
+                        <Text style={styles.pkgFeatureItem}>
+                          <Text style={styles.checkmark}>✓</Text> Fixed pricing structure
+                        </Text>
+                        <Text style={styles.pkgFeatureItem}>
+                          <Text style={styles.checkmark}>✓</Text> Reliable workforce booking
+                        </Text>
+                        <Text style={styles.pkgFeatureItem}>
+                          <Text style={styles.checkmark}>✓</Text> Standard response times (15m)
+                        </Text>
                       </View>
                       <View style={styles.pkgSelectBtn}>
                         <Text style={styles.pkgSelectText}>Select Basic Form ➔</Text>
@@ -820,33 +2958,35 @@ const ContractorDashboard = ({ user, onLogout }) => {
                       })}
                     >
                       <View style={styles.pkgBadgePremium}>
-                        <Text style={styles.pkgBadgeText}>ENTERPRISE</Text>
+                        <Text style={styles.pkgBadgePremiumText}>ENTERPRISE</Text>
                       </View>
-                      <Text style={[styles.pkgNameText, { color: '#8B5CF6' }]}>Premium Dynamic</Text>
-                      <Text style={styles.pkgPriceText}>$199<Text style={styles.pkgPriceUnit}> + $25 / cleaner</Text></Text>
-                      <Text style={styles.pkgWorkersText}>✨ Dynamic crew sizing (up to 50)</Text>
+                      <Text style={[styles.pkgNameText, { color: '#8B5CF6' }]}>Premium Team</Text>
+                      <Text style={styles.pkgPriceText}>$199<Text style={styles.pkgPriceUnit}> / month</Text></Text>
+                      <Text style={styles.pkgRenewText}>{formatPlanRenewalText('Premium', 199)}</Text>
+                      <Text style={styles.pkgWorkersText}>✨ Dynamic crew sizing (up to 50) • +$25 / cleaner</Text>
                       <View style={styles.pkgFeatures}>
-                        <Text style={styles.pkgFeatureItem}>✓ Dynamic pricing calculations</Text>
-                        <Text style={styles.pkgFeatureItem}>✓ Real-time active GPS tracking</Text>
-                        <Text style={styles.pkgFeatureItem}>✓ Priority worker dispatching</Text>
-                        <Text style={styles.pkgFeatureItem}>✓ 🚨 Urgent support dispatch (5m)</Text>
+                        <Text style={styles.pkgFeatureItem}>
+                          <Text style={styles.checkmark}>✓</Text> Dynamic pricing calculations
+                        </Text>
+                        <Text style={styles.pkgFeatureItem}>
+                          <Text style={styles.checkmark}>✓</Text> Real-time active GPS tracking
+                        </Text>
+                        <Text style={styles.pkgFeatureItem}>
+                          <Text style={styles.checkmark}>✓</Text> Priority worker dispatching
+                        </Text>
+                        <Text style={styles.pkgFeatureItem}>
+                          <Text style={styles.checkmark}>✓</Text> 🚨 Urgent support dispatch (5m)
+                        </Text>
                       </View>
                       <View style={[styles.pkgSelectBtn, styles.pkgSelectBtnPremium]}>
-                        <Text style={styles.pkgSelectTextPremium}>Select Premium Form ➔</Text>
+                        <Text style={styles.pkgSelectTextPremium}>Select Premium Plan ➔</Text>
                       </View>
                     </TouchableOpacity>
                   </View>
                 </View>
               ) : (
-                /* ── State B: Contract Creation Form screen ── */
                 <View style={styles.formCard}>
                   <View style={styles.formCardHeader}>
-                    <TouchableOpacity
-                      style={styles.backToPackagesBtn}
-                      onPress={() => fadeTransition(() => setSelectedPackage(null))}
-                    >
-                      <Text style={styles.backToPackagesText}>← Back to Packages</Text>
-                    </TouchableOpacity>
                     <View style={[
                       styles.tierBadge,
                       selectedPackage.name === 'Premium' ? styles.tierBadgePremium : styles.tierBadgeBasic
@@ -859,41 +2999,20 @@ const ContractorDashboard = ({ user, onLogout }) => {
                     {selectedPackage.name === 'Premium' ? 'Premium Dispatch Specifications' : 'Basic Dispatch Specifications'}
                   </Text>
                   
-                  {/* Dynamic Pricing breakdown card */}
-                  <View style={styles.pricingSummaryCard}>
-                    <View style={styles.priceDetailRow}>
-                      <Text style={styles.priceLabel}>Package Type:</Text>
-                      <Text style={styles.priceVal}>{selectedPackage.name} Tier</Text>
-                    </View>
-                    <View style={styles.priceDetailRow}>
-                      <Text style={styles.priceLabel}>Base Rate:</Text>
-                      <Text style={styles.priceVal}>${selectedPackage.name === 'Premium' ? '199' : '299'}</Text>
-                    </View>
-                    {selectedPackage.name === 'Premium' && requiredWorkersCount > 1 && (
-                      <View style={styles.priceDetailRow}>
-                        <Text style={styles.priceLabel}>Additional Crew ({requiredWorkersCount - 1} slots):</Text>
-                        <Text style={styles.priceVal}>+${(requiredWorkersCount - 1) * 25}</Text>
-                      </View>
-                    )}
-                    <View style={styles.priceDivider} />
-                    <View style={styles.priceDetailRow}>
-                      <Text style={styles.priceLabelTotal}>Total Dispatched Price:</Text>
-                      <Text style={styles.priceValTotal}>${calculatePrice()}</Text>
-                    </View>
-                  </View>
+
 
                   {/* ── Form Fields ── */}
                   <CustomInput
-                    label="Client Name"
+                    label="Contractor Name"
                     value={clientName}
-                    onChangeText={setClientName}
                     placeholder="Grand Central Office Complex"
                     icon="🏢"
                     required
+                    editable={false}
                   />
 
                   <CustomInput
-                    label="Client Phone Number"
+                    label="Contractor Phone Number"
                     value={clientPhone}
                     onChangeText={setClientPhone}
                     placeholder="77 123 4567"
@@ -961,23 +3080,32 @@ const ContractorDashboard = ({ user, onLogout }) => {
 
                   {/* Date, Time, Duration */}
                   <View style={styles.rowFields}>
-                    <View style={{ width: '31%' }}>
+                    <View style={{ width: '38%' }}>
                       <CustomInput
                         label="Date"
                         value={date}
-                        onChangeText={setDate}
-                        placeholder="2026-05-30"
+                        placeholder="Select Date"
+                        icon="📅"
+                        required
+                        onPress={() => {
+                          setCalendarTarget('newContract');
+                          setCurrentCalendarMonth(date ? new Date(date) : new Date());
+                          setShowCalendarModal(true);
+                        }}
                       />
                     </View>
-                    <View style={{ width: '31%' }}>
+                    <View style={{ width: '29%' }}>
                       <CustomInput
                         label="Start Time"
                         value={startTime}
                         onChangeText={setStartTime}
+                        onBlur={handleNewContractTimeBlur}
                         placeholder="09:00"
+                        keyboardType="numeric"
+                        maxLength={5}
                       />
                     </View>
-                    <View style={{ width: '31%' }}>
+                    <View style={{ width: '29%' }}>
                       <CustomInput
                         label="Duration (Min)"
                         value={durationMinutes}
@@ -1046,105 +3174,13 @@ const ContractorDashboard = ({ user, onLogout }) => {
                           <Text style={[styles.priorityCardLabel, isUrgent && styles.priorityCardLabelActiveRed]}>
                             Urgent
                           </Text>
-                          <Text style={styles.priorityCardDesc}>5 min deadline</Text>
+                          <Text style={styles.priorityCardDesc}>10 min deadline</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
                   )}
 
-                  {/* ── Worker Search and Selection ── */}
-                  <View style={styles.divider} />
-                  <Text style={styles.workerSelectHeading}>
-                    Search & Select Crew
-                    {selectedPackage.name === 'Basic' ? ' (Max 5)' : ` (Min ${requiredWorkersCount})`}
-                  </Text>
-                  <TextInput
-                    style={styles.searchBarInput}
-                    placeholder="🔍 Search cleaners by ID (email) or Name"
-                    value={workerQuery}
-                    onChangeText={handleSearchWorkers}
-                  />
 
-                  {searching && <ActivityIndicator color={Colors.primary} style={{ margin: 12 }} />}
-
-                  {searchResults.length > 0 && (
-                    <ScrollView style={styles.workerResultsContainer} nestedScrollEnabled={true}>
-                      {searchResults.map((worker) => {
-                        const isSelected = selectedWorkers.some(w => w._id === worker._id);
-                        
-                        // Status styling helper
-                        const getStatusDot = (st) => {
-                          if (st === 'available' || st === 'active_shift') return '#10B981'; // Green
-                          if (st === 'busy' || st === 'cleaning' || st === 'on_job') return '#F59E0B'; // Amber
-                          if (st === 'offline') return '#94A3B8'; // Grey
-                          return '#94A3B8';
-                        };
-
-                        const getStatusLabel = (st) => {
-                          if (st === 'available') return 'AVAILABLE';
-                          if (st === 'active_shift') return 'ACTIVE (ONLINE)';
-                          if (st === 'offline') return 'OFFLINE';
-                          if (st === 'busy') return 'BUSY';
-                          if (st === 'cleaning') return 'CLEANING (BUSY)';
-                          if (st === 'on_job') return 'ON JOB (BUSY)';
-                          return (st || '').toUpperCase().replace('_', ' ');
-                        };
-
-                        const isSelectable = ['available', 'active_shift'].includes(worker.status);
-
-                        return (
-                          <View
-                            key={worker._id}
-                            style={[
-                              styles.workerSearchCard,
-                              isSelected && styles.workerSearchCardSelected
-                            ]}
-                          >
-                            <View style={styles.workerCardInfo}>
-                              <Text style={styles.workerCardName}>👤 {worker.name}</Text>
-                              <Text style={styles.workerCardId}>ID: {worker.email}</Text>
-                              <View style={styles.workerCardStatusRow}>
-                                <View style={[styles.statusDot, { backgroundColor: getStatusDot(worker.status) }]} />
-                                <Text style={styles.workerCardStatusText}>
-                                  {getStatusLabel(worker.status)}
-                                </Text>
-                              </View>
-                            </View>
-
-                            <TouchableOpacity
-                              style={[
-                                styles.workerCardSelectBtn,
-                                isSelected && styles.workerCardSelectBtnRemove,
-                                !isSelectable && !isSelected && styles.workerCardSelectBtnDisabled
-                              ]}
-                              onPress={() => toggleSelectWorker(worker)}
-                            >
-                              <Text style={[
-                                styles.workerCardSelectBtnText,
-                                isSelected && styles.workerCardSelectBtnTextRemove
-                              ]}>
-                                {isSelected ? 'Remove' : !isSelectable ? 'Locked' : 'Select'}
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
-                        );
-                      })}
-                    </ScrollView>
-                  )}
-
-                  {selectedWorkers.length > 0 && (
-                    <View style={styles.crewReviewBox}>
-                      <Text style={styles.crewReviewTitle}>Dispatched Crew List ({selectedWorkers.length}):</Text>
-                      {selectedWorkers.map((worker) => (
-                        <View key={worker._id} style={styles.crewReviewItem}>
-                          <Text style={styles.crewReviewName}>👤 {worker.name}</Text>
-                          <TouchableOpacity onPress={() => toggleSelectWorker(worker)}>
-                            <Text style={styles.crewReviewRemoveText}>Remove</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ))}
-                    </View>
-                  )}
 
                   <TouchableOpacity
                     style={[styles.dispatchBtn, loading && styles.dispatchBtnDisabled]}
@@ -1174,7 +3210,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
                   <Text style={styles.emptyText}>No active contracts found. Create a contract first.</Text>
                   <TouchableOpacity
                     style={styles.emptyLinkBtn}
-                    onPress={() => fadeTransition(() => { setSelectedPackage(null); setActiveTab('newContract'); })}
+                    onPress={() => fadeTransition(() => { setSelectedPackage(null); navigateToTab('newContract'); })}
                   >
                     <Text style={styles.emptyLinkText}>Draft New Dispatch Now ➔</Text>
                   </TouchableOpacity>
@@ -1394,61 +3430,66 @@ const ContractorDashboard = ({ user, onLogout }) => {
               )}
             </View>
           )}
+
+              {activeTab === 'roster' && renderRosterTab()}
+              {activeTab === 'clientRequests' && renderClientRequestsTab()}
+              {activeTab === 'freelance' && renderFreelanceTab()}
+            </>
+          )}
         </Animated.View>
 
         <AppFooter />
       </ScrollView>
 
       {/* ── Floating bottom navigation bar ── */}
-      <View style={styles.tabBarContainer}>
-        <TouchableOpacity
-          style={styles.tabBarItem}
-          activeOpacity={0.8}
-          onPress={() => {
-            if (activeTab !== 'projects') {
-              fadeTransition(() => setActiveTab('projects'));
-            }
-          }}
-        >
-          <Text style={[styles.tabBarIcon, activeTab === 'projects' && styles.tabBarIconActive]}>📁</Text>
-          <Text style={[styles.tabBarLabel, activeTab === 'projects' && styles.tabBarLabelActive]}>Projects</Text>
-          {activeTab === 'projects' && <View style={styles.tabActiveIndicator} />}
-        </TouchableOpacity>
+      {onboardingStep === null && (
+        <View style={styles.tabBarContainer}>
+          <TouchableOpacity
+            style={styles.tabBarItem}
+            activeOpacity={0.8}
+            onPress={() => {
+              if (activeTab !== 'projects') {
+                fadeTransition(() => navigateToTab('projects'));
+              }
+            }}
+          >
+            <Text style={[styles.tabBarIcon, activeTab === 'projects' && styles.tabBarIconActive]}>📁</Text>
+            <Text style={[styles.tabBarLabel, activeTab === 'projects' && styles.tabBarLabelActive]}>Projects</Text>
+            {activeTab === 'projects' && <View style={styles.tabActiveIndicator} />}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.tabBarItem}
-          activeOpacity={0.8}
-          onPress={() => {
-            if (activeTab !== 'newContract') {
-              fadeTransition(() => {
-                setSelectedPackage(null); // Default to package selection screen
-                setActiveTab('newContract');
-              });
-            }
-          }}
-        >
-          <Text style={[styles.tabBarIcon, activeTab === 'newContract' && styles.tabBarIconActive]}>➕</Text>
-          <Text style={[styles.tabBarLabel, activeTab === 'newContract' && styles.tabBarLabelActive]}>New Contract</Text>
-          {activeTab === 'newContract' && <View style={styles.tabActiveIndicator} />}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.tabBarItem}
+            activeOpacity={0.8}
+            onPress={() => {
+              if (activeTab !== 'clientRequests') {
+                fadeTransition(() => navigateToTab('clientRequests'));
+              }
+            }}
+          >
+            <Text style={[styles.tabBarIcon, activeTab === 'clientRequests' && styles.tabBarIconActive]}>📥</Text>
+            <Text style={[styles.tabBarLabel, activeTab === 'clientRequests' && styles.tabBarLabelActive]}>Bids</Text>
+            {activeTab === 'clientRequests' && <View style={styles.tabActiveIndicator} />}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.tabBarItem}
-          activeOpacity={0.8}
-          onPress={() => {
-            if (activeTab !== 'gps') {
-              fadeTransition(() => {
-                setMockProgress(0); // Restart route tracking
-                setActiveTab('gps');
-              });
-            }
-          }}
-        >
-          <Text style={[styles.tabBarIcon, activeTab === 'gps' && styles.tabBarIconActive]}>📡</Text>
-          <Text style={[styles.tabBarLabel, activeTab === 'gps' && styles.tabBarLabelActive]}>Real-time GPS</Text>
-          {activeTab === 'gps' && <View style={styles.tabActiveIndicator} />}
-        </TouchableOpacity>
-      </View>
+          <TouchableOpacity
+            style={styles.tabBarItem}
+            activeOpacity={0.8}
+            onPress={() => {
+              if (activeTab !== 'freelance') {
+                fadeTransition(() => navigateToTab('freelance'));
+              }
+            }}
+          >
+            <Text style={[styles.tabBarIcon, activeTab === 'freelance' && styles.tabBarIconActive]}>💼</Text>
+            <Text style={[styles.tabBarLabel, activeTab === 'freelance' && styles.tabBarLabelActive]}>Crew Free</Text>
+            {activeTab === 'freelance' && <View style={styles.tabActiveIndicator} />}
+          </TouchableOpacity>
+
+
+        </View>
+      )}
+      {renderPaymentModal()}
     </View>
   );
 };
@@ -1760,26 +3801,41 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 4
   },
+  customPkgCardBasic: {
+    borderColor: '#3B82F6',
+    borderWidth: 2
+  },
   customPkgCardPremium: {
-    borderColor: 'rgba(124, 58, 237, 0.3)',
-    shadowColor: '#7C3AED',
-    shadowOpacity: 0.08
+    borderColor: '#E9D5FF',
+    borderWidth: 1.5
   },
   pkgBadgeBasic: {
-    backgroundColor: '#EFF6FF',
+    backgroundColor: '#E6F4EA',
     alignSelf: 'flex-start',
-    paddingVertical: 3,
+    paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
     marginBottom: 10
   },
+  pkgBadgeBasicText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#137333',
+    letterSpacing: 0.5
+  },
   pkgBadgePremium: {
-    backgroundColor: '#F5F3FF',
+    backgroundColor: '#E8F0FE',
     alignSelf: 'flex-start',
-    paddingVertical: 3,
+    paddingVertical: 4,
     paddingHorizontal: 8,
     borderRadius: 6,
     marginBottom: 10
+  },
+  pkgBadgePremiumText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#1A73E8',
+    letterSpacing: 0.5
   },
   pkgBadgeText: {
     fontSize: 8.5,
@@ -1804,6 +3860,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#64748B'
   },
+  pkgRenewText: {
+    fontSize: 11.5,
+    color: '#1E40AF',
+    fontWeight: '700',
+    marginBottom: 8
+  },
   pkgWorkersText: {
     fontSize: 12.5,
     color: '#475569',
@@ -1816,13 +3878,18 @@ const styles = StyleSheet.create({
   },
   pkgFeatureItem: {
     fontSize: 12,
-    color: '#64748B',
+    color: '#334155',
     fontWeight: '600'
   },
+  checkmark: {
+    color: '#10B981',
+    fontWeight: '900',
+    marginRight: 6
+  },
   pkgSelectBtn: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1.2,
-    borderColor: '#CBD5E1',
+    borderColor: '#E2E8F0',
     borderRadius: 14,
     height: 46,
     alignItems: 'center',
@@ -1830,18 +3897,18 @@ const styles = StyleSheet.create({
     marginTop: 14
   },
   pkgSelectBtnPremium: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#7C3AED'
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E2E8F0'
   },
   pkgSelectText: {
     fontSize: 13,
     fontWeight: '900',
-    color: '#475569'
+    color: '#1E293B'
   },
   pkgSelectTextPremium: {
     fontSize: 13,
     fontWeight: '900',
-    color: '#7C3AED'
+    color: '#1E293B'
   },
 
   // ── Form Card Styles ──
@@ -2770,6 +4837,1555 @@ const styles = StyleSheet.create({
     color: '#1F2937',
     fontWeight: '700',
     lineHeight: 18
+  },
+
+  // ── New Crewlynk System Styles ──
+  rosterTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginBottom: 8,
+    marginTop: 10
+  },
+  packageCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    marginBottom: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1
+  },
+  packageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6
+  },
+  packageName: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#1E293B'
+  },
+  packageUpgradeBtn: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8
+  },
+  packageUpgradeText: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  packageLimitText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600'
+  },
+  addCrewSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    marginBottom: 20
+  },
+  addCrewTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#1E293B',
+    marginBottom: 8
+  },
+  addCrewRow: {
+    flexDirection: 'row',
+    marginBottom: 10
+  },
+  addCrewInput: {
+    flex: 1,
+    height: 42,
+    borderWidth: 1.2,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    fontSize: 13,
+    color: '#0F172A',
+    backgroundColor: '#F8FAFC'
+  },
+  searchResultCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 6
+  },
+  approveBtn: {
+    backgroundColor: Colors.primary,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8
+  },
+  approveBtnText: {
+    color: '#FFFFFF',
+    fontSize: 11.5,
+    fontWeight: '800'
+  },
+  rosterGrid: {
+    gap: 12,
+    marginBottom: 20
+  },
+  rosterCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1
+  },
+  workerIdText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#94A3B8',
+    marginBottom: 4
+  },
+  workerNameText: {
+    fontSize: 14.5,
+    fontWeight: '850',
+    color: '#0F172A',
+    marginBottom: 4
+  },
+  workerPhoneText: {
+    fontSize: 11.5,
+    color: '#475569',
+    fontWeight: '600',
+    marginBottom: 6
+  },
+  workerStatusText: {
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  profileCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    marginBottom: 20,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.02,
+    shadowRadius: 8,
+    elevation: 2
+  },
+  profileHeader: {
+    marginBottom: 16
+  },
+  profileName: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0F172A',
+    marginBottom: 8
+  },
+  profileContact: {
+    fontSize: 12.5,
+    color: '#475569',
+    fontWeight: '600',
+    marginBottom: 4
+  },
+  profilePeriodRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16
+  },
+  periodLabel: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#1E293B'
+  },
+  periodButtons: {
+    flexDirection: 'row',
+    gap: 6
+  },
+  periodBtn: {
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 8
+  },
+  periodBtnActive: {
+    backgroundColor: Colors.primary
+  },
+  periodBtnText: {
+    color: '#475569',
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  periodBtnTextActive: {
+    color: '#FFFFFF'
+  },
+  payoutCard: {
+    backgroundColor: 'rgba(16, 185, 129, 0.04)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(16, 185, 129, 0.15)',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 20
+  },
+  payoutTitle: {
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#059669',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4
+  },
+  payoutValue: {
+    fontSize: 24,
+    fontWeight: '950',
+    color: '#059669',
+    marginBottom: 4
+  },
+  payoutHours: {
+    fontSize: 12,
+    color: '#059669',
+    fontWeight: '700'
+  },
+  handoverSection: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16
+  },
+  handoverTitle: {
+    fontSize: 13,
+    fontWeight: '850',
+    color: '#0F172A',
+    marginBottom: 8
+  },
+  handoverInputRow: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center'
+  },
+  handoverBtn: {
+    height: 44,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  handoverBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  backBtn: {
+    backgroundColor: '#E2E8F0',
+    paddingVertical: 11,
+    alignItems: 'center',
+    borderRadius: 12
+  },
+  backBtnText: {
+    color: '#475569',
+    fontSize: 12.5,
+    fontWeight: '800'
+  },
+
+  // Client requests bids styles
+  clientReqCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    marginBottom: 14,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    elevation: 1
+  },
+  clientReqHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  clientReqCategory: {
+    fontSize: 14,
+    fontWeight: '850',
+    color: '#0F172A'
+  },
+  clientReqDate: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '600',
+    marginBottom: 2
+  },
+  clientReqLoc: {
+    fontSize: 11.5,
+    color: '#64748B',
+    fontWeight: '550',
+    marginBottom: 6
+  },
+  clientReqDesc: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600',
+    lineHeight: 18
+  },
+  priceBadge: {
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 8
+  },
+  priceBadgeText: {
+    color: Colors.primary,
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  bidInputRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    marginTop: 4
+  },
+  bidInput: {
+    flex: 1,
+    height: 40,
+    borderWidth: 1.2,
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    fontSize: 13,
+    color: '#0F172A',
+    backgroundColor: '#F8FAFC'
+  },
+  bidBtn: {
+    height: 40,
+    backgroundColor: Colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  bidBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12.5,
+    fontWeight: '800'
+  },
+
+  // Freelance Form & cards styles
+  freelanceForm: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    marginBottom: 20
+  },
+  freelanceFormTitle: {
+    fontSize: 14,
+    fontWeight: '850',
+    color: '#1E293B',
+    marginBottom: 12
+  },
+  rowFields: {
+    flexDirection: 'row',
+    gap: 12
+  },
+  freelanceCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    marginBottom: 12,
+    overflow: 'hidden'
+  },
+  freelanceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16
+  },
+  freelanceCategoryText: {
+    fontSize: 13.5,
+    fontWeight: '850',
+    color: '#0F172A',
+    marginBottom: 4
+  },
+  freelanceDateText: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+    marginBottom: 2
+  },
+  freelanceDetailsBox: {
+    backgroundColor: '#F8FAFC',
+    borderTopWidth: 1.2,
+    borderTopColor: '#F1F5F9',
+    padding: 16
+  },
+  freelanceDescText: {
+    fontSize: 12.5,
+    color: '#334155',
+    fontWeight: '600',
+    lineHeight: 18,
+    marginBottom: 8
+  },
+  applicantsTitle: {
+    fontSize: 12.5,
+    fontWeight: '850',
+    color: '#0F172A',
+    marginBottom: 10
+  },
+  applicantRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 8
+  },
+  applicantName: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#0F172A'
+  },
+  applicantPhone: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '650',
+    marginTop: 2
+  },
+  noOffersText: {
+    fontSize: 11.5,
+    color: '#94A3B8',
+    fontWeight: '600',
+    fontStyle: 'italic'
+  },
+  
+  // Custom Dropdowns Styles
+  dropdownContainer: {
+    width: '100%',
+    marginBottom: 14
+  },
+  fieldLabel: {
+    fontSize: 13,
+    color: '#334155',
+    marginBottom: 6,
+    fontWeight: '700',
+    letterSpacing: 0.1
+  },
+  required: {
+    color: Colors.danger
+  },
+  dropdownSelectBox: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.2,
+    borderColor: 'rgba(30, 58, 138, 0.25)',
+    borderRadius: 12,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%'
+  },
+  dropdownSelectIcon: {
+    fontSize: 16,
+    marginRight: 10,
+    color: '#64748B'
+  },
+  dropdownSelectText: {
+    color: '#1E293B',
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1
+  },
+  dropdownPlaceholder: {
+    color: '#94A3B8',
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  dropdownArrowIcon: {
+    fontSize: 10,
+    color: '#64748B',
+    marginLeft: 10
+  },
+  dropdownErrorBorder: {
+    borderColor: Colors.danger
+  },
+  dropdownMenu: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 6,
+    padding: 6,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+    width: '100%',
+    zIndex: 10
+  },
+  dropdownMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 2
+  },
+  dropdownMenuItemActive: {
+    backgroundColor: 'rgba(16, 185, 129, 0.04)'
+  },
+  dropdownMenuItemText: {
+    fontSize: 13.5,
+    color: '#334155',
+    fontWeight: '600'
+  },
+  selectedCheckmark: {
+    color: Colors.primary,
+    fontWeight: '900',
+    fontSize: 13
+  },
+
+  // Calendar Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  calendarContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    width: '90%',
+    maxWidth: 340,
+    padding: 20,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15,
+    elevation: 8
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20
+  },
+  calendarNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  calendarNavBtnText: {
+    fontSize: 12,
+    color: '#334155'
+  },
+  calendarMonthTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A'
+  },
+  weekdaysRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10
+  },
+  weekdayText: {
+    width: '14.28%',
+    textAlign: 'center',
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B'
+  },
+  daysGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start'
+  },
+  dayCell: {
+    width: '14.28%',
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 18,
+    marginVertical: 4
+  },
+  dayCellEmpty: {
+    width: '14.28%',
+    height: 36
+  },
+  dayCellSelected: {
+    backgroundColor: '#10B981'
+  },
+  dayCellToday: {
+    borderWidth: 1.5,
+    borderColor: '#1E3A8A'
+  },
+  dayCellPast: {
+    opacity: 0.35
+  },
+  dayText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155'
+  },
+  dayTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '800'
+  },
+  dayTextToday: {
+    color: '#1E3A8A',
+    fontWeight: '800'
+  },
+  dayTextPast: {
+    color: '#94A3B8'
+  },
+  calendarCloseBtn: {
+    marginTop: 20,
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center'
+  },
+  calendarCloseBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#334155'
+  },
+
+  // Roster Tab Worker Profile View Styles
+  profileIdBadge: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#1E3A8A',
+    backgroundColor: '#EFF6FF',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginTop: 4,
+    marginBottom: 8
+  },
+  profileSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    padding: 16,
+    marginBottom: 16
+  },
+  profileSectionTitle: {
+    fontSize: 13.5,
+    fontWeight: '850',
+    color: '#0F172A',
+    marginBottom: 12
+  },
+  emptySectionText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontStyle: 'italic',
+    fontWeight: '600'
+  },
+  miniProjectCard: {
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8
+  },
+  miniProjectTitle: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 4
+  },
+  miniProjectSub: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+    marginTop: 2
+  },
+  handoverSelectBox: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.2,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    height: 48,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%'
+  },
+  handoverSelectText: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#334155'
+  },
+  handoverDropdownMenu: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 4,
+    padding: 4,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+    width: '100%'
+  },
+  handoverDropdownItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 6
+  },
+  handoverDropdownItemText: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600'
+  },
+  handoverSubmitBtn: {
+    height: 44,
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 10
+  },
+  handoverSubmitBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12.5,
+    fontWeight: '800'
+  },
+  periodSelectBox: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.2,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    height: 44,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%'
+  },
+  periodSelectText: {
+    fontSize: 12.5,
+    fontWeight: '750',
+    color: '#334155'
+  },
+  periodDropdownMenu: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    marginTop: 4,
+    padding: 4,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 3,
+    width: '100%'
+  },
+  periodDropdownItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 6
+  },
+  periodDropdownItemText: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600'
+  },
+  tableHeaderRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1.5,
+    borderBottomColor: '#CBD5E1',
+    paddingBottom: 8,
+    marginBottom: 8
+  },
+  tableHeaderCell: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#475569'
+  },
+  emptyTableText: {
+    fontSize: 12,
+    color: '#94A3B8',
+    fontStyle: 'italic',
+    fontWeight: '600',
+    marginVertical: 10,
+    textAlign: 'center'
+  },
+  tableBodyRow: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingVertical: 10,
+    alignItems: 'center'
+  },
+  tableBodyCell: {
+    fontSize: 11.5,
+    color: '#334155',
+    fontWeight: '600'
+  },
+  totalSummaryBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.04)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(16, 185, 129, 0.15)',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 16
+  },
+  totalSummaryLabel: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    color: '#047857'
+  },
+  totalSummaryValue: {
+    fontSize: 18,
+    fontWeight: '950',
+    color: '#047857'
+  },
+  onboardingCard: {
+    padding: 20,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    margin: 16,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 2
+  },
+  onboardingTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 8
+  },
+  onboardingSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 20
+  },
+  onboardingRosterWrapper: {
+    width: '100%'
+  },
+  onboardingPackageCard: {
+    backgroundColor: '#EEF2F6',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  onboardingPackageName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#1E293B',
+    marginBottom: 4
+  },
+  onboardingPackageLimit: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600'
+  },
+  rosterSectionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 20,
+    marginBottom: 10
+  },
+  rosterCardCompact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    padding: 12,
+    marginBottom: 8
+  },
+  workerIdBadgeOnboarding: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#3B82F6',
+    backgroundColor: '#E0F2FE',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    overflow: 'hidden'
+  },
+  onboardingFinishBtn: {
+    backgroundColor: '#10B981',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 24,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3
+  },
+  onboardingFinishBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800'
+  },
+  onboardingBackBtn: {
+    alignItems: 'center',
+    paddingVertical: 12,
+    marginTop: 10
+  },
+  onboardingBackBtnText: {
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '700'
+  },
+  pkgCardSelected: {
+    borderColor: '#3B82F6',
+    borderWidth: 2,
+    shadowColor: '#3B82F6',
+    shadowOpacity: 0.1,
+    backgroundColor: '#F0F7FF'
+  },
+  crewGridContainer: {
+    marginBottom: 20,
+    marginTop: 10
+  },
+  homeCrewCard: {
+    width: 105,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    borderRadius: 16,
+    padding: 12,
+    marginRight: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2
+  },
+  homeCrewAvatarContainer: {
+    position: 'relative',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  homeCrewAvatarIcon: {
+    fontSize: 20
+  },
+  homeCrewStatusDot: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: '#FFFFFF'
+  },
+  homeCrewName: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0F172A',
+    textAlign: 'center',
+    width: '100%',
+    marginBottom: 2
+  },
+  homeCrewId: {
+    fontSize: 10,
+    color: '#64748B',
+    fontWeight: '500'
+  },
+  assignJobBtn: {
+    backgroundColor: '#3B82F6',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+    shadowColor: '#3B82F6',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+    zIndex: 10
+  },
+  assignJobBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800'
+  },
+  selectedDateDisplay: {
+    backgroundColor: '#F0F9FF',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#3B82F6'
+  },
+  selectedDateLabel: {
+    fontSize: 12,
+    color: '#64748B',
+    fontWeight: '600',
+    marginBottom: 4
+  },
+  selectedDateText: {
+    fontSize: 16,
+    color: '#0F172A',
+    fontWeight: '700',
+    marginBottom: 8
+  },
+  proceedToContractBtn: {
+    backgroundColor: '#10B981',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center'
+  },
+  proceedToContractBtnText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800'
+  },
+  backToDashboardBtn: {
+    backgroundColor: '#F1F5F9',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    alignSelf: 'flex-start'
+  },
+  backToDashboardBtnText: {
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '700'
+  },
+  profileGpsCard: {
+    backgroundColor: '#0F172A',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: '#1E293B'
+  },
+  profileGpsTitle: {
+    color: '#F8FAFC',
+    fontSize: 14,
+    fontWeight: '800',
+    marginBottom: 10
+  },
+  profileGpsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between'
+  },
+  profileGpsCol: {
+    width: '48%',
+    backgroundColor: '#1E293B',
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 8
+  },
+  profileGpsLabel: {
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '600',
+    marginBottom: 2
+  },
+  profileGpsVal: {
+    color: '#F8FAFC',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  automatedLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontStyle: 'italic',
+    marginTop: 6,
+    textAlign: 'center'
+  },
+  packageRenewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10
+  },
+  renewBtn: {
+    backgroundColor: '#10B981',
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12
+  },
+  renewBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  autoRenewToggle: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  autoRenewLabel: {
+    fontSize: 12,
+    color: '#475569',
+    fontWeight: '700',
+    marginRight: 6
+  },
+  autoRenewBadgeActive: {
+    color: '#10B981',
+    fontWeight: '800',
+    fontSize: 12
+  },
+  autoRenewBadgeInactive: {
+    color: '#F59E0B',
+    fontWeight: '800',
+    fontSize: 12
+  },
+  earlySelectChargeText: {
+    fontSize: 11,
+    color: '#EF4444',
+    fontWeight: '700',
+    marginTop: 6
+  },
+  // ── Payment Modal Styles ──
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 8,
+    position: 'relative'
+  },
+  modalCloseBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    padding: 6,
+    zIndex: 10
+  },
+  modalCloseBtnText: {
+    fontSize: 16,
+    color: '#94A3B8',
+    fontWeight: '700'
+  },
+  modalHeader: {
+    alignSelf: 'flex-start',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    width: '100%',
+    paddingBottom: 10,
+    marginBottom: 16
+  },
+  modalHeaderPaymentTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#94A3B8',
+    letterSpacing: 1,
+    marginBottom: 2
+  },
+  modalHeaderPlanTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1E293B'
+  },
+  modalBodyTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#475569',
+    textAlign: 'center',
+    marginBottom: 16
+  },
+  modalPriceContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 20,
+    width: '100%'
+  },
+  modalPriceLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '700',
+    marginBottom: 2,
+    textTransform: 'uppercase'
+  },
+  modalPriceValue: {
+    fontSize: 32,
+    color: '#0F172A',
+    fontWeight: '900'
+  },
+  paypalBtn: {
+    backgroundColor: '#FFC439',
+    borderRadius: 10,
+    height: 48,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 16,
+    gap: 6
+  },
+  paypalIcon: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0079C1',
+    fontStyle: 'italic'
+  },
+  paypalIconText: {
+    color: '#003087',
+    fontSize: 16,
+    fontWeight: '900',
+    fontStyle: 'italic',
+    marginRight: 4
+  },
+  paypalBtnText: {
+    color: '#003087',
+    fontSize: 14,
+    fontWeight: '800'
+  },
+  modalDividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 14,
+    width: '100%'
+  },
+  modalDividerLine: {
+    flex: 1,
+    height: 1.2,
+    backgroundColor: '#E2E8F0'
+  },
+  modalDividerText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    fontWeight: '800',
+    paddingHorizontal: 10
+  },
+  cardBtn: {
+    borderWidth: 1.2,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    height: 48,
+    backgroundColor: '#FFFFFF',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    gap: 8
+  },
+  cardBtnText: {
+    color: '#334155',
+    fontSize: 13.5,
+    fontWeight: '800'
+  },
+  cardLogos: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 14,
+    marginBottom: 10
+  },
+  cardLogoBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4
+  },
+  cardLogoText: {
+    fontSize: 9,
+    fontWeight: '900'
+  },
+  secureFooter: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8
+  },
+  secureFooterText: {
+    fontSize: 10,
+    color: '#94A3B8',
+    fontWeight: '600'
+  },
+  paypalHeaderLogoBox: {
+    backgroundColor: '#003087',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 22,
+    alignSelf: 'center',
+    marginBottom: 16
+  },
+  paypalHeaderLogoText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '900',
+    fontStyle: 'italic'
+  },
+  paypalInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.2,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    height: 46,
+    paddingHorizontal: 12,
+    fontSize: 13.5,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 12,
+    width: '100%'
+  },
+  paypalLoginBtn: {
+    backgroundColor: '#003087',
+    borderRadius: 10,
+    height: 46,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 6,
+    marginBottom: 14
+  },
+  paypalLoginBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800'
+  },
+  backLinkContainer: {
+    alignSelf: 'center',
+    paddingVertical: 8
+  },
+  backLinkText: {
+    color: '#475569',
+    fontSize: 12.5,
+    fontWeight: '800'
+  },
+  confirmBox: {
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    borderRadius: 10,
+    padding: 12,
+    width: '100%',
+    marginBottom: 16
+  },
+  confirmRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    paddingVertical: 8
+  },
+  confirmLabel: {
+    fontSize: 12.5,
+    color: '#64748B',
+    fontWeight: '600'
+  },
+  confirmValue: {
+    fontSize: 12.5,
+    color: '#0F172A',
+    fontWeight: '750',
+    flex: 1,
+    textAlign: 'right'
+  },
+  paypalPayBtn: {
+    backgroundColor: '#FFC439',
+    borderRadius: 10,
+    height: 46,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 14
+  },
+  paypalPayBtnText: {
+    color: '#003087',
+    fontSize: 14,
+    fontWeight: '800'
+  },
+  successCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#DCFCE7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 14
+  },
+  successCircleText: {
+    color: '#22C55E',
+    fontSize: 24,
+    fontWeight: '900'
+  },
+  successTitle: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 6,
+    textAlign: 'center'
+  },
+  successDescription: {
+    fontSize: 12.5,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 18,
+    marginBottom: 20,
+    paddingHorizontal: 8
+  },
+  successActionBtn: {
+    backgroundColor: '#10B981',
+    borderRadius: 10,
+    height: 46,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%'
+  },
+  successActionBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800'
+  },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginBottom: 14
+  },
+  cardHeaderTitle: {
+    fontSize: 14.5,
+    fontWeight: '800',
+    color: '#1E293B'
+  },
+  cardAmountContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#EFF6FF',
+    borderRadius: 8,
+    padding: 12,
+    width: '100%',
+    marginBottom: 14
+  },
+  cardAmountLabel: {
+    fontSize: 12.5,
+    color: '#475569',
+    fontWeight: '700'
+  },
+  cardAmountVal: {
+    fontSize: 13.5,
+    color: '#2563EB',
+    fontWeight: '900'
+  },
+  cardFieldLabel: {
+    fontSize: 11.5,
+    fontWeight: '750',
+    color: '#475569',
+    alignSelf: 'flex-start',
+    marginBottom: 4
+  },
+  cardInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.2,
+    borderColor: '#CBD5E1',
+    borderRadius: 8,
+    height: 40,
+    paddingHorizontal: 10,
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginBottom: 10,
+    width: '100%'
+  },
+  cardPayBtn: {
+    backgroundColor: '#2563EB',
+    borderRadius: 10,
+    height: 46,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    marginTop: 8,
+    marginBottom: 10
+  },
+  cardPayBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800'
+  },
+  secureCardFooter: {
+    alignSelf: 'center',
+    marginBottom: 14
+  },
+  secureCardFooterText: {
+    fontSize: 9.5,
+    color: '#94A3B8',
+    fontWeight: '600'
   }
 });
 

@@ -15,7 +15,7 @@ const rl = readline.createInterface({
 const ask = (q) => new Promise((resolve) => rl.question(q, resolve));
 
 (async () => {
-  console.log('\n=== CleanTrack Email Setup ===\n');
+  console.log('\n=== CrewLynk Email Setup ===\n');
   console.log('Choose how to send OTP emails:\n');
   console.log('  1) Gmail SMTP (App Password)');
   console.log('  2) Resend API (free at https://resend.com)\n');
@@ -37,7 +37,7 @@ const ask = (q) => new Promise((resolve) => rl.question(q, resolve));
   if (choice.trim() === '2') {
     const apiKey = await ask('Paste your Resend API key (re_...): ');
     setVar('RESEND_API_KEY', apiKey.trim());
-    setVar('RESEND_FROM', 'CleanTrack <onboarding@resend.dev>');
+    setVar('RESEND_FROM', 'CrewLynk <onboarding@resend.dev>');
     console.log('\n✅ Resend configured. Restart backend: npm run dev\n');
   } else {
     const user = await ask('Gmail address (SMTP_USER): ');
