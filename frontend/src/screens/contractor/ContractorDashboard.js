@@ -2010,105 +2010,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
           />
         </View>
 
-        {/* Custom Calendar Picker Modal */}
-        <Modal
-          visible={showCalendarModal}
-          transparent={true}
-          animationType="fade"
-          onRequestClose={() => setShowCalendarModal(false)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.calendarContainer}>
-              <View style={styles.calendarHeader}>
-                <TouchableOpacity 
-                  onPress={() => {
-                    const prevMonth = new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() - 1, 1);
-                    setCurrentCalendarMonth(prevMonth);
-                  }}
-                  style={styles.calendarNavBtn}
-                >
-                  <Text style={styles.calendarNavBtnText}>◀</Text>
-                </TouchableOpacity>
-                <Text style={styles.calendarMonthTitle}>
-                  {currentCalendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
-                </Text>
-                <TouchableOpacity 
-                  onPress={() => {
-                    const nextMonth = new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() + 1, 1);
-                    setCurrentCalendarMonth(nextMonth);
-                  }}
-                  style={styles.calendarNavBtn}
-                >
-                  <Text style={styles.calendarNavBtnText}>▶</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.weekdaysRow}>
-                {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d, index) => (
-                  <Text key={index} style={styles.weekdayText}>{d}</Text>
-                ))}
-              </View>
-
-              <View style={styles.daysGrid}>
-                {getDaysInMonth(currentCalendarMonth).map((day, index) => {
-                  if (!day) {
-                    return <View key={`empty-${index}`} style={styles.dayCellEmpty} />;
-                  }
-                  
-                  const yyyy = day.getFullYear();
-                  const mm = String(day.getMonth() + 1).padStart(2, '0');
-                  const dd = String(day.getDate()).padStart(2, '0');
-                  const dateStr = `${yyyy}-${mm}-${dd}`;
-                  
-                  const isSelected = calendarTarget === 'newContract'
-                    ? date === dateStr
-                    : calendarTarget === 'rosterAssign'
-                    ? rosterAssignDate === dateStr
-                    : freelanceDate === dateStr;
-                  const isToday = new Date().toDateString() === day.toDateString();
-
-                  return (
-                    <TouchableOpacity
-                      key={dateStr}
-                      style={styles.dayCell}
-                      onPress={() => {
-                        if (calendarTarget === 'newContract') {
-                          setDate(dateStr);
-                        } else if (calendarTarget === 'rosterAssign') {
-                          setRosterAssignDate(dateStr);
-                        } else {
-                          setFreelanceDate(dateStr);
-                        }
-                        setShowCalendarModal(false);
-                      }}
-                    >
-                      <View style={[
-                        styles.dayInnerCircle,
-                        isSelected && styles.dayInnerCircleSelected,
-                        isToday && !isSelected && styles.dayInnerCircleToday
-                      ]}>
-                        <Text style={[
-                          styles.dayText,
-                          isSelected && styles.dayTextSelected,
-                          isToday && !isSelected && styles.dayTextToday
-                        ]}>
-                          {day.getDate()}
-                        </Text>
-                      </View>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <TouchableOpacity 
-                style={styles.calendarCloseBtn}
-                onPress={() => setShowCalendarModal(false)}
-              >
-                <Text style={styles.calendarCloseBtnText}>Close</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+        {/* Custom Calendar Picker Modal removed from here */}
 
         {/* Postings List */}
         <Text style={styles.sectionTitle}>Your Posted Roster Openings ({freelanceJobs.filter(j => j.targetType === 'crew').length})</Text>
@@ -3447,6 +3349,106 @@ const ContractorDashboard = ({ user, onLogout }) => {
         </View>
       )}
       {renderPaymentModal()}
+
+      {/* Custom Calendar Picker Modal */}
+      <Modal
+        visible={showCalendarModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowCalendarModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.calendarContainer}>
+            <View style={styles.calendarHeader}>
+              <TouchableOpacity 
+                onPress={() => {
+                  const prevMonth = new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() - 1, 1);
+                  setCurrentCalendarMonth(prevMonth);
+                }}
+                style={styles.calendarNavBtn}
+              >
+                <Text style={styles.calendarNavBtnText}>◀</Text>
+              </TouchableOpacity>
+              <Text style={styles.calendarMonthTitle}>
+                {currentCalendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+              </Text>
+              <TouchableOpacity 
+                onPress={() => {
+                  const nextMonth = new Date(currentCalendarMonth.getFullYear(), currentCalendarMonth.getMonth() + 1, 1);
+                  setCurrentCalendarMonth(nextMonth);
+                }}
+                style={styles.calendarNavBtn}
+              >
+                <Text style={styles.calendarNavBtnText}>▶</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.weekdaysRow}>
+              {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d, index) => (
+                <Text key={index} style={styles.weekdayText}>{d}</Text>
+              ))}
+            </View>
+
+            <View style={styles.daysGrid}>
+              {getDaysInMonth(currentCalendarMonth).map((day, index) => {
+                if (!day) {
+                  return <View key={`empty-${index}`} style={styles.dayCellEmpty} />;
+                }
+                
+                const yyyy = day.getFullYear();
+                const mm = String(day.getMonth() + 1).padStart(2, '0');
+                const dd = String(day.getDate()).padStart(2, '0');
+                const dateStr = `${yyyy}-${mm}-${dd}`;
+                
+                const isSelected = calendarTarget === 'newContract'
+                  ? date === dateStr
+                  : calendarTarget === 'rosterAssign'
+                  ? rosterAssignDate === dateStr
+                  : freelanceDate === dateStr;
+                const isToday = new Date().toDateString() === day.toDateString();
+
+                return (
+                  <TouchableOpacity
+                    key={dateStr}
+                    style={styles.dayCell}
+                    onPress={() => {
+                      if (calendarTarget === 'newContract') {
+                        setDate(dateStr);
+                      } else if (calendarTarget === 'rosterAssign') {
+                        setRosterAssignDate(dateStr);
+                      } else {
+                        setFreelanceDate(dateStr);
+                      }
+                      setShowCalendarModal(false);
+                    }}
+                  >
+                    <View style={[
+                      styles.dayInnerCircle,
+                      isSelected && styles.dayInnerCircleSelected,
+                      isToday && !isSelected && styles.dayInnerCircleToday
+                    ]}>
+                      <Text style={[
+                        styles.dayText,
+                        isSelected && styles.dayTextSelected,
+                        isToday && !isSelected && styles.dayTextToday
+                      ]}>
+                        {day.getDate()}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity 
+              style={styles.calendarCloseBtn}
+              onPress={() => setShowCalendarModal(false)}
+            >
+              <Text style={styles.calendarCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
