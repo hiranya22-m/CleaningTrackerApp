@@ -65,6 +65,7 @@ const attendanceRoutes = require('./routes/attendance');
 const contractorRoutes = require('./routes/contractor');
 const workerRoutes = require('./routes/worker');
 const adminRoutes = require('./routes/admin');
+const clientRoutes = require('./routes/client');
 const gpsRoutes = require('./routes/gps');
 const { processExpiredAssignments } = require('./services/assignmentExpiryService');
 const { processSubscriptionRenewals } = require('./services/subscriptionService');
@@ -77,6 +78,7 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/contractor', contractorRoutes);
 app.use('/api/worker', workerRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/client', clientRoutes);
 app.use('/api/gps', gpsRoutes);
 
 // Configure socket.io connection logic
