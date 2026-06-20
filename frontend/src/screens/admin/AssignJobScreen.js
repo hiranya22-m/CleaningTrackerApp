@@ -58,9 +58,60 @@ const AssignJobScreen = ({ onJobCreated }) => {
     fetchWorkers();
   }, []);
 
+  const handleJobTimeBlur = () => {
+    let cleanTime = jobTime.trim();
+    if (!cleanTime) return;
+
+    cleanTime = cleanTime.replace(/[^0-9:]/g, '');
+    if (!cleanTime.includes(':')) {
+      if (cleanTime.length === 1 || cleanTime.length === 2) {
+        let hr = parseInt(cleanTime);
+        if (hr >= 0 && hr <= 23) {
+          cleanTime = `${String(hr).padStart(2, '0')}:00`;
+        }
+      } else if (cleanTime.length === 3) {
+        let hr = parseInt(cleanTime.slice(0, 1));
+        let min = parseInt(cleanTime.slice(1));
+        if (hr >= 0 && hr <= 9 && min >= 0 && min <= 59) {
+          cleanTime = `0${hr}:${String(min).padStart(2, '0')}`;
+        }
+      } else if (cleanTime.length === 4) {
+        let hr = parseInt(cleanTime.slice(0, 2));
+        let min = parseInt(cleanTime.slice(2));
+        if (hr >= 0 && hr <= 23 && min >= 0 && min <= 59) {
+          cleanTime = `${String(hr).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+        }
+      }
+    } else {
+      const parts = cleanTime.split(':');
+      let hr = parseInt(parts[0]);
+      let min = parseInt(parts[1] || '0');
+      if (hr >= 0 && hr <= 23 && min >= 0 && min <= 59) {
+        cleanTime = `${String(hr).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+      }
+    }
+
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(cleanTime)) {
+      Alert.alert(
+        'Invalid Time Format',
+        'Time must be in 24-hour HH:MM format (e.g., 09:00 or 17:30). Reverting to default (09:00).'
+      );
+      setJobTime('09:00');
+    } else {
+      setJobTime(cleanTime);
+    }
+  };
+
   const handleCreateJob = async () => {
     if (!customerName || !address || latitude === undefined || longitude === undefined || !assignedWorker || !jobDate || !jobTime) {
       Alert.alert('Missing Fields', 'Please complete all required fields and select a worker.');
+      return;
+    }
+
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(jobTime)) {
+      Alert.alert('Invalid Time', 'Start Time must be in 24-hour HH:MM format (e.g. 09:00 or 17:30).');
       return;
     }
 
@@ -243,6 +294,7 @@ const AssignJobScreen = ({ onJobCreated }) => {
               label="Start Time"
               value={jobTime}
               onChangeText={setJobTime}
+              onBlur={handleJobTimeBlur}
               placeholder="09:00"
               keyboardType="numeric"
               required

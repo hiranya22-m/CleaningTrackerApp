@@ -48,6 +48,8 @@ const ClientDashboard = ({ user, onLogout }) => {
   const [postLocation, setPostLocation] = useState(user.state || '');
   const [postDate, setPostDate] = useState('2026-06-15');
   const [postTime, setPostTime] = useState('09:00');
+  const [searchingPlace, setSearchingPlace] = useState(false);
+  const [searchSuggestions, setSearchSuggestions] = useState([]);
 
   // Inbox states
   const [requests, setRequests] = useState([]);
@@ -126,9 +128,109 @@ const ClientDashboard = ({ user, onLogout }) => {
     fetchContractors(cat.id);
   };
 
+  const handlePlaceSearch = async (query) => {
+    setPostLocation(query);
+    if (query.trim().length < 3) {
+      setSearchSuggestions([]);
+      return;
+    }
+
+    try {
+      setSearchingPlace(true);
+      const response = await fetch(
+        `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&lang=en`
+      );
+      const data = await response.json();
+      
+      if (data && data.features) {
+        const mapped = data.features.map((feature) => {
+          const props = feature.properties || {};
+          const coords = feature.geometry?.coordinates || [0, 0];
+          
+          const parts = [];
+          if (props.name) parts.push(props.name);
+          if (props.housenumber) parts.push(props.housenumber);
+          if (props.street) parts.push(props.street);
+          if (props.district) parts.push(props.district);
+          if (props.city) parts.push(props.city);
+          if (props.state) parts.push(props.state);
+          if (props.postcode) parts.push(props.postcode);
+          if (props.country) parts.push(props.country);
+          
+          let displayName = parts.filter(Boolean).join(', ');
+          displayName = displayName
+            .replace(/ශ්‍රී ලංකාව/g, 'Sri Lanka')
+            .replace(/இலங்கை/g, 'Sri Lanka');
+          
+          return {
+            lat: coords[1],
+            lon: coords[0],
+            display_name: displayName
+          };
+        });
+        setSearchSuggestions(mapped);
+      }
+    } catch (e) {
+      console.warn('Place autocomplete search failed:', e.message);
+    } finally {
+      setSearchingPlace(false);
+    }
+  };
+
+  const handlePostTimeBlur = () => {
+    let cleanTime = postTime.trim();
+    if (!cleanTime) return;
+
+    cleanTime = cleanTime.replace(/[^0-9:]/g, '');
+    if (!cleanTime.includes(':')) {
+      if (cleanTime.length === 1 || cleanTime.length === 2) {
+        let hr = parseInt(cleanTime);
+        if (hr >= 0 && hr <= 23) {
+          cleanTime = `${String(hr).padStart(2, '0')}:00`;
+        }
+      } else if (cleanTime.length === 3) {
+        let hr = parseInt(cleanTime.slice(0, 1));
+        let min = parseInt(cleanTime.slice(1));
+        if (hr >= 0 && hr <= 9 && min >= 0 && min <= 59) {
+          cleanTime = `0${hr}:${String(min).padStart(2, '0')}`;
+        }
+      } else if (cleanTime.length === 4) {
+        let hr = parseInt(cleanTime.slice(0, 2));
+        let min = parseInt(cleanTime.slice(2));
+        if (hr >= 0 && hr <= 23 && min >= 0 && min <= 59) {
+          cleanTime = `${String(hr).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+        }
+      }
+    } else {
+      const parts = cleanTime.split(':');
+      let hr = parseInt(parts[0]);
+      let min = parseInt(parts[1] || '0');
+      if (hr >= 0 && hr <= 23 && min >= 0 && min <= 59) {
+        cleanTime = `${String(hr).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+      }
+    }
+
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(cleanTime)) {
+      Alert.alert(
+        'Invalid Time Format',
+        'Time must be in 24-hour HH:MM format (e.g., 09:00 or 17:30). Reverting to default (09:00).'
+      );
+      setPostTime('09:00');
+    } else {
+      setPostTime(cleanTime);
+    }
+  };
+
   const handlePostRequest = async () => {
     if (!postDesc.trim() || !postLocation.trim() || !postDate.trim() || !postTime.trim()) {
       Alert.alert('Required Fields', 'Please fill out all request details.');
+      return;
+    }
+
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (!timeRegex.test(postTime)) {
+      Alert.alert('Invalid Time', 'Start Time must be in 24-hour HH:MM format (e.g. 09:00 or 17:30).');
       return;
     }
 
@@ -338,11 +440,32 @@ const ClientDashboard = ({ user, onLogout }) => {
             <CustomInput
               label="Location / Address"
               value={postLocation}
-              onChangeText={setPostLocation}
+              onChangeText={handlePlaceSearch}
               placeholder="e.g. New York, Brooklyn Office"
               icon="📍"
               required
             />
+            {searchingPlace && (
+              <ActivityIndicator color={Colors.primary} style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
+            )}
+            {searchSuggestions.length > 0 && (
+              <View style={styles.suggestionsBox}>
+                {searchSuggestions.map((item, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={styles.suggestionItem}
+                    onPress={() => {
+                      setPostLocation(item.display_name);
+                      setSearchSuggestions([]);
+                    }}
+                  >
+                    <Text style={styles.suggestionText} numberOfLines={1}>
+                      📍 {item.display_name}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
 
             <View style={styles.rowFields}>
               <View style={{ flex: 1 }}>
@@ -363,7 +486,8 @@ const ClientDashboard = ({ user, onLogout }) => {
                   label="Start Time"
                   value={postTime}
                   onChangeText={setPostTime}
-                  placeholder="HH:MM"
+                  onBlur={handlePostTimeBlur}
+                  placeholder="09:00"
                   icon="🕒"
                   required
                 />
@@ -1194,6 +1318,25 @@ const styles = StyleSheet.create({
   calendarCloseBtnText: {
     color: '#0F172A',
     fontWeight: '800'
+  },
+  suggestionsBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    marginTop: 8,
+    overflow: 'hidden'
+  },
+  suggestionItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF2F6'
+  },
+  suggestionText: {
+    fontSize: 11.5,
+    color: '#334155',
+    fontWeight: '700'
   }
 });
 
