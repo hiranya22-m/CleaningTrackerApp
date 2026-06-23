@@ -61,6 +61,21 @@ const getDaysInMonth = (date) => {
   return days;
 };
 
+const getTodayString = () => {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const getCurrentTime24 = () => {
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+};
+
 const ContractorDashboard = ({ user, onLogout }) => {
   const [profileUser, setProfileUser] = useState(user);
   const [subscription, setSubscription] = useState(null);
@@ -90,16 +105,17 @@ const ContractorDashboard = ({ user, onLogout }) => {
   const [loading, setLoading] = useState(false);
 
   // ── Contract Form State ─────────────────────────────────────────────────────
-  const [clientName, setClientName] = useState(user?.companyName || '');
+  const [clientName, setClientName] = useState(user?.companyName || user?.name || '');
   const [clientPhone, setClientPhone] = useState(user?.phoneNumber || '');
   const [clientCountryCode, setClientCountryCode] = useState('+94');
   const [address, setAddress] = useState('');
   const [latitude, setLatitude] = useState(NY_LAT.toString());
   const [longitude, setLongitude] = useState(NY_LNG.toString());
   const [notes, setNotes] = useState('');
-  const [date, setDate] = useState('2026-05-30');
-  const [startTime, setStartTime] = useState('09:00');
+  const [date, setDate] = useState(getTodayString());
+  const [startTime, setStartTime] = useState(getCurrentTime24());
   const [durationMinutes, setDurationMinutes] = useState('120');
+  const [pricePerHour, setPricePerHour] = useState('25');
   
   // Premium contract custom state
   const [requiredWorkersCount, setRequiredWorkersCount] = useState(1);
@@ -741,10 +757,10 @@ const ContractorDashboard = ({ user, onLogout }) => {
   };
 
 
-  const handleNewContractTimeBlur = () => {
+  const handleStartTimeBlur = () => {
     let cleanTime = startTime.trim();
     if (!cleanTime) {
-      setStartTime('09:00');
+      setStartTime(getCurrentTime24());
       return;
     }
     
@@ -764,11 +780,12 @@ const ContractorDashboard = ({ user, onLogout }) => {
 
     const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
     if (!timeRegex.test(cleanTime)) {
+      const defaultTime = getCurrentTime24();
       Alert.alert(
         'Invalid Time Format',
-        'Time must be in 24-hour HH:MM format (e.g., 09:00 or 17:30). Reverting to default (09:00).'
+        `Time must be in 24-hour HH:MM format (e.g., 09:00 or 17:30). Reverting to default (${defaultTime}).`
       );
-      setStartTime('09:00');
+      setStartTime(defaultTime);
     } else {
       setStartTime(cleanTime);
     }
@@ -777,11 +794,6 @@ const ContractorDashboard = ({ user, onLogout }) => {
   const handleFreelanceTimeBlur = () => {
     let cleanTime = freelanceTime.trim();
     if (!cleanTime) {
-      setFreelanceTime('09:00');
-      return;
-    }
-    
-    // Auto-insert leading zero if format is H:MM
     const singleHourRegex = /^([0-9]):([0-5][0-9])$/;
     if (singleHourRegex.test(cleanTime)) {
       cleanTime = '0' + cleanTime;
@@ -930,7 +942,8 @@ const ContractorDashboard = ({ user, onLogout }) => {
         date,
         startTime,
         durationMinutes: parseInt(durationMinutes),
-        notes: notes.trim()
+        notes: notes.trim(),
+        pricePerHour: parseFloat(pricePerHour) || 25
       };
 
       const res = await contractorAPI.createContract(contractData);
@@ -945,12 +958,15 @@ const ContractorDashboard = ({ user, onLogout }) => {
               text: 'Access Projects',
               onPress: () => {
                 // Reset form fields
-                setClientName('');
-                setClientPhone('');
+                setClientName(user?.companyName || user?.name || '');
+                setClientPhone(user?.phoneNumber || '');
                 setAddress('');
                 setLatitude(NY_LAT.toString());
                 setLongitude(NY_LNG.toString());
                 setNotes('');
+                setDate(getTodayString());
+                setStartTime(getCurrentTime24());
+                setPricePerHour('25');
                 setSelectedWorkers([]);
                 setSelectedPackage(null);
                 setMockProgress(0);
@@ -971,14 +987,15 @@ const ContractorDashboard = ({ user, onLogout }) => {
 
   const handleFormRefresh = async () => {
     setRefreshing(true);
-    setClientName('');
-    setClientPhone('');
+    setClientName(user?.companyName || user?.name || '');
+    setClientPhone(user?.phoneNumber || '');
     setAddress('');
     setLatitude(NY_LAT.toString());
     setLongitude(NY_LNG.toString());
     setNotes('');
-    setDate('2026-05-30');
-    setStartTime('09:00');
+    setDate(getTodayString());
+    setStartTime(getCurrentTime24());
+    setPricePerHour('25');
     setDurationMinutes('120');
     setRequiredWorkersCount(1);
     setIsUrgent(false);
@@ -1008,8 +1025,8 @@ const ContractorDashboard = ({ user, onLogout }) => {
   const [freelanceLoc, setFreelanceLoc] = useState('');
   const [freelanceHours, setFreelanceHours] = useState('4');
   const [freelancePrice, setFreelancePrice] = useState('25');
-  const [freelanceDate, setFreelanceDate] = useState('2026-06-15');
-  const [freelanceTime, setFreelanceTime] = useState('09:00');
+  const [freelanceDate, setFreelanceDate] = useState(getTodayString());
+  const [freelanceTime, setFreelanceTime] = useState(getCurrentTime24());
   const [freelanceDesc, setFreelanceDesc] = useState('');
   const [freelanceJobs, setFreelanceJobs] = useState([]);
   const [loadingFreelance, setLoadingFreelance] = useState(false);
@@ -1173,7 +1190,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
     try {
       const res = await contractorAPI.upgradePackage();
       if (res.success) {
-        Alert.alert('Upgraded! 🚀', 'Successfully upgraded to Premium Package. You can now add up to 50 crew members.');
+        Alert.alert('Upgraded! 🚀', 'Successfully upgraded to Premium Package. You can now add unlimited crew members.');
         loadInitialData();
       } else {
         Alert.alert('Upgrade Failed', res.message);
@@ -1367,7 +1384,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
   // Tab 4: Roster rendering helper
   const renderRosterTab = () => {
     const currentPkgName = packages.find(p => p._id === (profileUser?.packageId?._id || profileUser?.packageId))?.name || subscription?.packageName || 'Basic';
-    const limit = currentPkgName === 'Premium' ? 50 : 5;
+    const limit = currentPkgName === 'Premium' ? 'Unlimited' : 5;
 
     if (selectedRosterWorker) {
       const stats = workerProfileStats || { totalJobsCount: 0, completedJobsCount: 0, totalHours: 0, totalPayout: 0, hourlyRate: 25 };
@@ -1379,7 +1396,8 @@ const ContractorDashboard = ({ user, onLogout }) => {
         if (!isOngoing) return false;
         return c.assignments?.some(assign => {
           const workerId = assign.workerId?._id || assign.workerId;
-          return workerId && workerId.toString() === selectedRosterWorker._id.toString();
+          return workerId && workerId.toString() === selectedRosterWorker._id.toString() &&
+                 (assign.response === 'pending' || assign.response === 'accepted');
         });
       });
 
@@ -1389,7 +1407,8 @@ const ContractorDashboard = ({ user, onLogout }) => {
         if (!isOngoing) return false;
         const alreadyAssigned = c.assignments?.some(assign => {
           const workerId = assign.workerId?._id || assign.workerId;
-          return workerId && workerId.toString() === selectedRosterWorker._id.toString();
+          return workerId && workerId.toString() === selectedRosterWorker._id.toString() &&
+                 (assign.response === 'pending' || assign.response === 'accepted');
         });
         return !alreadyAssigned;
       });
@@ -1846,6 +1865,25 @@ const ContractorDashboard = ({ user, onLogout }) => {
 
   // Tab 6: Crew-targeted Freelance board tab rendering helper
   const renderFreelanceTab = () => {
+    const currentPkgName = packages.find(p => p._id === (profileUser?.packageId?._id || profileUser?.packageId))?.name || subscription?.packageName || 'Basic';
+    if (currentPkgName === 'Basic') {
+      return (
+        <View style={styles.lockedContainer}>
+          <Text style={styles.lockedIcon}>🔒</Text>
+          <Text style={styles.lockedTitle}>Freelance Workforce Locked</Text>
+          <Text style={styles.lockedSubtitle}>
+            Connecting and hiring freelance crew members is a premium feature. Please upgrade to the Premium Package to access the freelance workforce board.
+          </Text>
+          <TouchableOpacity 
+            style={styles.lockedUpgradeBtn}
+            onPress={handleUpgradeSubscription}
+          >
+            <Text style={styles.lockedUpgradeBtnText}>Upgrade to Premium Tier</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
       <View>
         <Text style={styles.rosterTitle}>Crew Workforce Shifts (Targeted to Crew Roster)</Text>
@@ -1961,6 +1999,17 @@ const ContractorDashboard = ({ user, onLogout }) => {
             placeholder="4"
             keyboardType="numeric"
             icon="🕒"
+            required
+          />
+
+          {/* Price Per Hour ($) */}
+          <CustomInput
+            label="Price Per Hour ($)"
+            value={freelancePrice}
+            onChangeText={setFreelancePrice}
+            placeholder="25"
+            keyboardType="numeric"
+            icon="💵"
             required
           />
 
@@ -2110,37 +2159,37 @@ const ContractorDashboard = ({ user, onLogout }) => {
                   </Text>
                 </Text>
                 <Text style={styles.pkgWorkersText}>
-                  {isPremium ? '✨ Dynamic crew sizing (up to 50)' : '🔒 Maximum 5 cleaners only'}
+                  {isPremium ? '✨ Unlimited crew members • connect with freelance workers' : '🔒 Maximum 5 crew members only'}
                 </Text>
                 <View style={styles.pkgFeatures}>
                   {isPremium ? (
                     <>
+                      <Text style={styles.pkgFeatureItem}>
+                        <Text style={styles.checkmark}>✓</Text> Unlimited crew members
+                      </Text>
+                      <Text style={styles.pkgFeatureItem}>
+                        <Text style={styles.checkmark}>✓</Text> Connect with freelance workers
+                      </Text>
                       <Text style={styles.pkgFeatureItem}>
                         <Text style={styles.checkmark}>✓</Text> Dynamic pricing calculations
                       </Text>
                       <Text style={styles.pkgFeatureItem}>
                         <Text style={styles.checkmark}>✓</Text> Real-time active GPS tracking
                       </Text>
-                      <Text style={styles.pkgFeatureItem}>
-                        <Text style={styles.checkmark}>✓</Text> Priority worker dispatching
-                      </Text>
-                      <Text style={styles.pkgFeatureItem}>
-                        <Text style={styles.checkmark}>✓</Text> 🚨 Urgent support dispatch (5m)
-                      </Text>
                     </>
                   ) : (
                     <>
+                      <Text style={styles.pkgFeatureItem}>
+                        <Text style={styles.checkmark}>✓</Text> Maximum 5 crew members only
+                      </Text>
+                      <Text style={styles.pkgFeatureItem}>
+                        <Text style={styles.checkmark}>✗</Text> No freelance workers access
+                      </Text>
                       <Text style={styles.pkgFeatureItem}>
                         <Text style={styles.checkmark}>✓</Text> Simple contract form
                       </Text>
                       <Text style={styles.pkgFeatureItem}>
                         <Text style={styles.checkmark}>✓</Text> Fixed pricing structure
-                      </Text>
-                      <Text style={styles.pkgFeatureItem}>
-                        <Text style={styles.checkmark}>✓</Text> Reliable workforce booking
-                      </Text>
-                      <Text style={styles.pkgFeatureItem}>
-                        <Text style={styles.checkmark}>✓</Text> Standard response times (15m)
                       </Text>
                     </>
                   )}
@@ -2160,7 +2209,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
 
   const renderOnboardingStep2 = () => {
     const currentPkgName = selectedPackage?.name || 'Basic';
-    const limit = currentPkgName === 'Premium' ? 50 : 5;
+    const limit = currentPkgName === 'Premium' ? 'Unlimited' : 5;
 
     return (
       <View style={styles.onboardingCard}>
@@ -2508,7 +2557,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
             <View>
               {(() => {
                 const currentPkgName = packages.find(p => p._id === (profileUser?.packageId?._id || profileUser?.packageId))?.name || subscription?.packageName || 'Basic';
-                const limit = currentPkgName === 'Premium' ? 50 : 5;
+                const limit = currentPkgName === 'Premium' ? 'Unlimited' : 5;
                 return (
                   <View>
                     <Text style={styles.rosterTitle}>Crew Members Roster ({rosterWorkers.length} / {limit})</Text>
@@ -2702,19 +2751,19 @@ const ContractorDashboard = ({ user, onLogout }) => {
                       <Text style={styles.pkgNameText}>Basic Team</Text>
                       <Text style={styles.pkgPriceText}>$299<Text style={styles.pkgPriceUnit}> / month</Text></Text>
                       <Text style={styles.pkgRenewText}>{formatPlanRenewalText('Basic', 299)}</Text>
-                      <Text style={styles.pkgWorkersText}>🔒 Maximum 5 cleaners only</Text>
+                      <Text style={styles.pkgWorkersText}>🔒 Maximum 5 crew members only</Text>
                       <View style={styles.pkgFeatures}>
+                        <Text style={styles.pkgFeatureItem}>
+                          <Text style={styles.checkmark}>✓</Text> Maximum 5 crew members only
+                        </Text>
+                        <Text style={styles.pkgFeatureItem}>
+                          <Text style={styles.checkmark}>✗</Text> No freelance workers access
+                        </Text>
                         <Text style={styles.pkgFeatureItem}>
                           <Text style={styles.checkmark}>✓</Text> Simple contract form
                         </Text>
                         <Text style={styles.pkgFeatureItem}>
                           <Text style={styles.checkmark}>✓</Text> Fixed pricing structure
-                        </Text>
-                        <Text style={styles.pkgFeatureItem}>
-                          <Text style={styles.checkmark}>✓</Text> Reliable workforce booking
-                        </Text>
-                        <Text style={styles.pkgFeatureItem}>
-                          <Text style={styles.checkmark}>✓</Text> Standard response times (15m)
                         </Text>
                       </View>
                       <View style={styles.pkgSelectBtn}>
@@ -2739,19 +2788,19 @@ const ContractorDashboard = ({ user, onLogout }) => {
                       <Text style={[styles.pkgNameText, { color: '#8B5CF6' }]}>Premium Team</Text>
                       <Text style={styles.pkgPriceText}>$199<Text style={styles.pkgPriceUnit}> / month</Text></Text>
                       <Text style={styles.pkgRenewText}>{formatPlanRenewalText('Premium', 199)}</Text>
-                      <Text style={styles.pkgWorkersText}>✨ Dynamic crew sizing (up to 50) • +$25 / cleaner</Text>
+                      <Text style={styles.pkgWorkersText}>✨ Unlimited crew members • connect with freelance workers</Text>
                       <View style={styles.pkgFeatures}>
+                        <Text style={styles.pkgFeatureItem}>
+                          <Text style={styles.checkmark}>✓</Text> Unlimited crew members
+                        </Text>
+                        <Text style={styles.pkgFeatureItem}>
+                          <Text style={styles.checkmark}>✓</Text> Connect with freelance workers
+                        </Text>
                         <Text style={styles.pkgFeatureItem}>
                           <Text style={styles.checkmark}>✓</Text> Dynamic pricing calculations
                         </Text>
                         <Text style={styles.pkgFeatureItem}>
                           <Text style={styles.checkmark}>✓</Text> Real-time active GPS tracking
-                        </Text>
-                        <Text style={styles.pkgFeatureItem}>
-                          <Text style={styles.checkmark}>✓</Text> Priority worker dispatching
-                        </Text>
-                        <Text style={styles.pkgFeatureItem}>
-                          <Text style={styles.checkmark}>✓</Text> 🚨 Urgent support dispatch (5m)
                         </Text>
                       </View>
                       <View style={[styles.pkgSelectBtn, styles.pkgSelectBtnPremium]}>
@@ -2781,10 +2830,11 @@ const ContractorDashboard = ({ user, onLogout }) => {
                   <CustomInput
                     label="Contractor Name"
                     value={clientName}
+                    onChangeText={setClientName}
                     placeholder="Grand Central Office Complex"
                     icon="🏢"
                     required
-                    editable={false}
+                    editable={true}
                   />
 
                   <CustomInput
@@ -2888,6 +2938,16 @@ const ContractorDashboard = ({ user, onLogout }) => {
                     onChangeText={setDurationMinutes}
                     placeholder="120"
                     keyboardType="numeric"
+                  />
+
+                  <CustomInput
+                    label="Price Per Hour ($)"
+                    value={pricePerHour}
+                    onChangeText={setPricePerHour}
+                    placeholder="25"
+                    keyboardType="numeric"
+                    icon="💵"
+                    required
                   />
 
                   <CustomInput
@@ -6218,6 +6278,59 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     color: '#94A3B8',
     fontWeight: '600'
+  },
+  lockedContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
+    marginHorizontal: 16,
+    marginTop: 24,
+    borderWidth: 1,
+    borderColor: '#E2E8F0'
+  },
+  lockedIcon: {
+    fontSize: 52,
+    marginBottom: 16
+  },
+  lockedTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 10,
+    textAlign: 'center'
+  },
+  lockedSubtitle: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+    paddingHorizontal: 12
+  },
+  lockedUpgradeBtn: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#8B5CF6',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 3
+  },
+  lockedUpgradeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800'
   }
 });
 

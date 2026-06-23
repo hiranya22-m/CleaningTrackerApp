@@ -87,7 +87,8 @@ exports.createContract = async (req, res) => {
       date,
       startTime,
       durationMinutes,
-      notes
+      notes,
+      pricePerHour
     } = req.body;
 
     if (!address || latitude === undefined || longitude === undefined || !packageId || !workers || workers.length === 0 || !date || !startTime || !durationMinutes) {
@@ -170,7 +171,8 @@ exports.createContract = async (req, res) => {
         startTime,
         durationMinutes: parseInt(durationMinutes)
       },
-      notes
+      notes,
+      pricePerHour: parseFloat(pricePerHour) || 25
     });
 
     // Create Worker Assignments with standard (2 hours = 120 mins) or urgent (10 mins) timers
@@ -394,12 +396,14 @@ exports.addWorkerToRoster = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Worker is already in your roster' });
     }
 
-    const currentPkg = await Package.findById(req.user.packageId) || await Package.findOne({ name: 'Basic' });
-    const limit = currentPkg ? currentPkg.maxWorkers : 5;
+    const contractor = await User.findById(req.user.id).populate('packageId');
+    const currentPkg = (contractor && contractor.packageId) || await Package.findOne({ name: 'Basic' });
+    const isPremium = currentPkg && currentPkg.name === 'Premium';
+    const limit = isPremium ? Infinity : 5;
 
     const currentWorkersCount = await User.countDocuments({ role: 'worker', contractorId: req.user.id });
 
-    if (currentWorkersCount >= limit) {
+    if (!isPremium && currentWorkersCount >= limit) {
       return res.status(400).json({
         success: false,
         message: `Package limit reached. Your current package permits a maximum of ${limit} workers. Please upgrade to a Premium package.`
@@ -477,6 +481,16 @@ exports.getWorkerRosterProfile = async (req, res) => {
  */
 exports.postFreelanceJob = async (req, res) => {
   try {
+    const contractor = await User.findById(req.user.id).populate('packageId');
+    const currentPkg = (contractor && contractor.packageId) || await Package.findOne({ name: 'Basic' });
+    const isPremium = currentPkg && currentPkg.name === 'Premium';
+    if (!isPremium) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your current package does not permit freelance worker access. Please upgrade to a Premium package.'
+      });
+    }
+
     const { category, location, hours, pricePerHour, date, time, description, targetType } = req.body;
 
     const actualTargetType = targetType === 'crew' ? 'crew' : 'public';
@@ -531,6 +545,16 @@ exports.getFreelanceJobs = async (req, res) => {
  */
 exports.approveFreelanceWorker = async (req, res) => {
   try {
+    const contractor = await User.findById(req.user.id).populate('packageId');
+    const currentPkg = (contractor && contractor.packageId) || await Package.findOne({ name: 'Basic' });
+    const isPremium = currentPkg && currentPkg.name === 'Premium';
+    if (!isPremium) {
+      return res.status(403).json({
+        success: false,
+        message: 'Your current package does not permit freelance worker access. Please upgrade to a Premium package.'
+      });
+    }
+
     const FreelanceJob = require('../models/FreelanceJob');
     const freelanceJob = await FreelanceJob.findOne({ _id: req.params.id, contractor: req.user.id });
 
@@ -739,13 +763,19 @@ exports.assignWorkerToContract = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Worker not found in your roster' });
     }
 
-    const isAssigned = contract.workers.some(w => w.toString() === workerId);
-    if (isAssigned) {
+    const activeAssignment = await WorkerAssignment.findOne({
+      contractId,
+      workerId,
+      response: { $in: ['pending', 'accepted'] }
+    });
+    if (activeAssignment) {
       return res.status(400).json({ success: false, message: 'Worker is already assigned to this contract' });
     }
 
-    contract.workers.push(workerId);
-    await contract.save();
+    if (!contract.workers.some(w => w.toString() === workerId.toString())) {
+      contract.workers.push(workerId);
+      await contract.save();
+    }
 
     const responseDeadline = new Date(Date.now() + 120 * 60 * 1000);
     const assignment = await WorkerAssignment.create({
