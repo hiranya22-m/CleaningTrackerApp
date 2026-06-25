@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { login, getProfile, getWorkers, updateProfile } = require('../controllers/authController');
+const { login, getProfile, getWorkers, updateProfile, getNotifications, markNotificationRead } = require('../controllers/authController');
 const { requestOtp, verifyOtp } = require('../controllers/otpController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 const emailService = require('../services/emailService');
@@ -29,5 +29,7 @@ router.post('/contractor/verify-otp', verifyOtp);
 router.get('/profile', protect, getProfile);
 router.put('/profile', protect, updateProfile);
 router.get('/workers', protect, authorize('admin', 'contractor'), getWorkers);
+router.get('/notifications', protect, getNotifications);
+router.put('/notifications/:id/read', protect, markNotificationRead);
 
 module.exports = router;

@@ -182,7 +182,25 @@ const ClientDashboard = ({ user, onLogout }) => {
             icon="📍"
           />
 
-          <View style={{ marginTop: 10 }}>
+          <View style={{ marginTop: 15 }}>
+            <TouchableOpacity 
+              style={{
+                backgroundColor: '#FCA5A5',
+                paddingVertical: 12,
+                borderRadius: 12,
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderWidth: 1.2,
+                borderColor: '#EF4444'
+              }} 
+              onPress={onLogout} 
+              activeOpacity={0.7}
+            >
+              <Text style={{ color: '#7F1D1D', fontWeight: '800', fontSize: 14 }}>Logout ➔</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ marginTop: 15 }}>
             <CustomButton
               title={updatingProfile ? "Saving Changes..." : "Save Changes"}
               type="primary"
@@ -401,9 +419,6 @@ const ClientDashboard = ({ user, onLogout }) => {
             <Text style={styles.portalSubtitle}>{user.name || 'Partner Account'}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={onLogout} activeOpacity={0.7}>
-          <Text style={styles.logoutText}>Logout ➔</Text>
-        </TouchableOpacity>
       </View>
 
       <ScrollView

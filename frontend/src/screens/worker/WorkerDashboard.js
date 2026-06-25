@@ -35,6 +35,12 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
   const [profileHourlyRate, setProfileHourlyRate] = useState(user?.hourlyRate !== undefined ? String(user.hourlyRate) : '');
   const [updatingProfile, setUpdatingProfile] = useState(false);
 
+  // --- Notifications States ---
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
+
   useEffect(() => {
     setProfileUser(user);
   }, [user]);
@@ -75,6 +81,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
       } else {
         setAttendance(null);
       }
+      await fetchNotifications();
     } catch (error) {
       console.error('Error loading worker dashboard:', error.message);
     }
@@ -108,11 +115,49 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
       loadData();
     });
 
+    socket.on(`worker_notification:${user.id}`, (data) => {
+      Alert.alert(
+        data.title || 'Notification 🔔',
+        data.message
+      );
+      loadData();
+    });
+
     return () => {
       clearInterval(timerInterval);
       socket.disconnect();
     };
   }, []);
+
+  const fetchNotifications = async () => {
+    setLoadingNotifications(true);
+    try {
+      const res = await authAPI.getNotifications();
+      if (res.success) {
+        setNotifications(res.notifications || []);
+        const unread = (res.notifications || []).filter(n => !n.read).length;
+        setUnreadNotificationsCount(unread);
+      }
+    } catch (e) {
+      console.warn('Failed to load worker notifications:', e.message);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const handleNotificationClick = async (notif) => {
+    try {
+      await authAPI.markNotificationRead(notif._id);
+      setNotifications(prev => prev.map(n => n._id === notif._id ? { ...n, read: true } : n));
+      setUnreadNotificationsCount(prev => Math.max(0, prev - 1));
+      setShowNotificationsModal(false);
+      if (notif.type === 'contract_request') {
+        setActiveTab('offers');
+      }
+    } catch (e) {
+      console.warn('Failed to handle notification click:', e.message);
+    }
+  };
 
   const handleUpdateProfile = async () => {
     if (!profileName.trim()) {
@@ -200,7 +245,25 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
             />
           ) : null}
 
-          <View style={{ marginTop: 10 }}>
+          <View style={{ marginTop: 15 }}>
+            <TouchableOpacity 
+              style={{
+                backgroundColor: '#FCA5A5',
+                paddingVertical: 12,
+                borderRadius: 12,
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderWidth: 1.2,
+                borderColor: '#EF4444'
+              }} 
+              onPress={onLogout} 
+              activeOpacity={0.7}
+            >
+              <Text style={{ color: '#7F1D1D', fontWeight: '800', fontSize: 14 }}>Logout ➔</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={{ marginTop: 15 }}>
             <CustomButton
               title={updatingProfile ? "Saving Changes..." : "Save Changes"}
               type="primary"
@@ -410,8 +473,30 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
             <Text style={styles.portalSubtitle}>Crew Roster: {user.name}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={onLogout} activeOpacity={0.7}>
-          <Text style={styles.logoutText}>Logout ➔</Text>
+        <TouchableOpacity 
+          style={{ position: 'relative', padding: 6 }} 
+          activeOpacity={0.7}
+          onPress={() => setShowNotificationsModal(true)}
+        >
+          <Text style={{ fontSize: 20 }}>🔔</Text>
+          {unreadNotificationsCount > 0 && (
+            <View style={{
+              position: 'absolute',
+              top: -2,
+              right: -2,
+              backgroundColor: '#EF4444',
+              borderRadius: 8,
+              minWidth: 16,
+              height: 16,
+              justifyContent: 'center',
+              alignItems: 'center',
+              paddingHorizontal: 3
+            }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '900' }}>
+                {unreadNotificationsCount}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
@@ -874,6 +959,78 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
           {activeTab === 'profile' && <View style={styles.tabActiveIndicator} />}
         </TouchableOpacity>
       </View>
+
+      {/* Crew Member Notifications Modal */}
+      <Modal
+        visible={showNotificationsModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowNotificationsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.calendarContainer}>
+            <View style={styles.calendarHeader}>
+              <Text style={styles.calendarMonthTitle}>🔔 Notifications</Text>
+              <TouchableOpacity 
+                onPress={() => setShowNotificationsModal(false)}
+                style={styles.calendarNavBtn}
+              >
+                <Text style={styles.calendarNavBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              style={{ maxHeight: 350, marginVertical: 10 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {loadingNotifications ? (
+                <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
+              ) : notifications.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: '#64748B', fontSize: 13, marginVertical: 20 }}>
+                  No notifications yet.
+                </Text>
+              ) : (
+                notifications.map(notif => (
+                  <TouchableOpacity
+                    key={notif._id}
+                    style={{
+                      padding: 12,
+                      backgroundColor: notif.read ? '#FFFFFF' : 'rgba(16, 185, 129, 0.05)',
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: notif.read ? '#E2E8F0' : 'rgba(16, 185, 129, 0.2)',
+                      marginBottom: 8
+                    }}
+                    onPress={() => handleNotificationClick(notif)}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <Text style={{ fontWeight: '800', color: Colors.secondary, fontSize: 13 }}>
+                        {notif.title}
+                      </Text>
+                      {!notif.read && (
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' }} />
+                      )}
+                    </View>
+                    <Text style={{ fontSize: 12, color: '#475569', marginBottom: 6 }}>
+                      {notif.message}
+                    </Text>
+                    <Text style={{ fontSize: 9.5, color: '#94A3B8', alignSelf: 'flex-end' }}>
+                      {new Date(notif.createdAt).toLocaleString()}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+
+            <TouchableOpacity 
+              style={styles.calendarCloseBtn}
+              onPress={() => setShowNotificationsModal(false)}
+            >
+              <Text style={styles.calendarCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1594,6 +1751,60 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 14,
     elevation: 3
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  calendarContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    width: '90%',
+    maxWidth: 340,
+    padding: 20,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.15,
+    shadowRadius: 15,
+    elevation: 8
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 20
+  },
+  calendarNavBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#F1F5F9',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  calendarNavBtnText: {
+    fontSize: 12,
+    color: '#334155'
+  },
+  calendarMonthTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A'
+  },
+  calendarCloseBtn: {
+    marginTop: 20,
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: 'center'
+  },
+  calendarCloseBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#334155'
   }
 });
 

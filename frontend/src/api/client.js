@@ -302,6 +302,14 @@ export const authAPI = {
     }
     return res.data;
   },
+  getNotifications: async () => {
+    const res = await apiClient.get('/auth/notifications');
+    return res.data;
+  },
+  markNotificationRead: async (id) => {
+    const res = await apiClient.put(`/auth/notifications/${id}/read`);
+    return res.data;
+  },
   getWorkers: async () => {
     const res = await apiClient.get('/auth/workers');
     return res.data;
@@ -381,30 +389,6 @@ export const contractorAPI = {
   },
   getSubscription: async () => {
     const res = await apiClient.get('/contractor/package/subscription');
-    return res.data;
-  },
-  getOngoingProjects: async () => {
-    const res = await apiClient.get('/contractor/projects/ongoing');
-    return res.data;
-  },
-  getHandedOverProjects: async () => {
-    const res = await apiClient.get('/contractor/projects/handed-over');
-    return res.data;
-  },
-  getActiveGpsProjects: async () => {
-    const res = await apiClient.get('/contractor/projects/gps-active');
-    return res.data;
-  },
-  handoverProject: async (id) => {
-    const res = await apiClient.post(`/contractor/projects/${id}/handover`);
-    return res.data;
-  },
-  getNotifications: async () => {
-    const res = await apiClient.get('/contractor/notifications');
-    return res.data;
-  },
-  markNotificationRead: async (id) => {
-    const res = await apiClient.put(`/contractor/notifications/${id}/read`);
     return res.data;
   }
 };

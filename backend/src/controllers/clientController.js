@@ -2,7 +2,6 @@ const ClientRequest = require('../models/ClientRequest');
 const User = require('../models/User');
 const Contract = require('../models/Contract');
 const Package = require('../models/Package');
-const { notifyUser } = require('../services/notificationService');
 
 /**
  * @desc    Create a new client job request
@@ -43,13 +42,6 @@ exports.getRequests = async (req, res) => {
       .populate('offers.contractor', 'name companyName email phoneNumber tags locations')
       .sort('-createdAt');
 
-    // Sort contractor offers by price ascending (lowest first)
-    requests.forEach(r => {
-      if (r.offers && r.offers.length > 0) {
-        r.offers.sort((a, b) => a.price - b.price);
-      }
-    });
-
     res.status(200).json({ success: true, count: requests.length, requests });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -68,11 +60,6 @@ exports.getOffers = async (req, res) => {
 
     if (!request) {
       return res.status(404).json({ success: false, message: 'Request not found' });
-    }
-
-    // Sort contractor offers by price ascending (lowest first)
-    if (request.offers && request.offers.length > 0) {
-      request.offers.sort((a, b) => a.price - b.price);
     }
 
     res.status(200).json({ success: true, count: request.offers.length, offers: request.offers });
@@ -148,20 +135,17 @@ exports.acceptOffer = async (req, res) => {
         durationMinutes: 120 // Default 2 hours duration
       },
       notes: `Accepted Client Request: ${request.description}`,
-      status: 'Contractor Assigned',
-      category: request.category
+      status: 'active'
     });
 
-    // Notify Contractor via Socket and database notification
+    // Notify Contractor via Socket
     const io = req.app.get('socketio');
-    await notifyUser(io, {
-      userId: contractor._id,
-      type: 'contract_accepted',
-      title: 'Offer Accepted! 🧼',
-      message: `Client ${req.user.name} accepted your offer for ${request.category}!`,
-      data: { contractId: contract._id, requestId: request._id },
-      socketEvent: 'contractor_notification'
-    });
+    if (io) {
+      io.emit(`contractor_notification:${contractor._id}`, {
+        message: `Client ${req.user.name} accepted your offer for ${request.category}!`,
+        response: 'accepted'
+      });
+    }
 
     res.status(200).json({ success: true, message: 'Offer accepted and contract created.', request, contract });
   } catch (error) {

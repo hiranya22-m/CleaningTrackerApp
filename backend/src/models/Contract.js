@@ -16,8 +16,8 @@ const ContractSchema = new mongoose.Schema({
   isUrgent: { type: Boolean, default: false },
   status: {
     type: String,
-    enum: ['pending', 'active', 'completed', 'cancelled', 'Pending', 'Offer Sent', 'Contractor Assigned', 'Assigned', 'Ongoing', 'Handed Over', 'Completed', 'Cancelled'],
-    default: 'Contractor Assigned',
+    enum: ['pending', 'active', 'completed', 'cancelled'],
+    default: 'pending',
   },
   schedule: {
     date: { type: Date, required: true },
@@ -26,9 +26,6 @@ const ContractSchema = new mongoose.Schema({
   },
   notes: { type: String },
   pricePerHour: { type: Number, default: 25 },
-  category: { type: String, default: 'Cleaning' },
-  handoverDate: { type: Date },
-  handoverTime: { type: String },
   createdAt: { type: Date, default: Date.now },
 });
 

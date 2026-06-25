@@ -141,3 +141,39 @@ exports.updateProfile = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+/**
+ * @desc    Get current user notifications
+ * @route   GET /api/auth/notifications
+ * @access  Private
+ */
+exports.getNotifications = async (req, res) => {
+  try {
+    const Notification = require('../models/Notification');
+    const notifications = await Notification.find({ userId: req.user.id })
+      .sort('-createdAt')
+      .limit(50);
+    res.json({ success: true, notifications });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * @desc    Mark a specific notification as read
+ * @route   PUT /api/auth/notifications/:id/read
+ * @access  Private
+ */
+exports.markNotificationRead = async (req, res) => {
+  try {
+    const Notification = require('../models/Notification');
+    const notification = await Notification.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user.id },
+      { read: true },
+      { new: true }
+    );
+    res.json({ success: true, notification });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

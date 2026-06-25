@@ -18,13 +18,7 @@ const {
   assignWorkerToContract,
   setRenewOption,
   renewPackage,
-  getSubscription,
-  getOngoingProjects,
-  getHandedOverProjects,
-  getActiveGpsProjects,
-  handoverProject,
-  getNotifications,
-  markNotificationRead
+  getSubscription
 } = require('../controllers/contractorController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 
@@ -50,13 +44,5 @@ router.post('/freelance', postFreelanceJob);
 router.get('/freelance', getFreelanceJobs);
 router.post('/freelance/:id/approve/:workerId', approveFreelanceWorker);
 router.post('/workers/:id/assign', assignWorkerToContract);
-
-router.get('/projects/ongoing', getOngoingProjects);
-router.get('/projects/handed-over', getHandedOverProjects);
-router.get('/projects/gps-active', getActiveGpsProjects);
-router.post('/projects/:id/handover', handoverProject);
-
-router.get('/notifications', getNotifications);
-router.put('/notifications/:id/read', markNotificationRead);
 
 module.exports = router;
