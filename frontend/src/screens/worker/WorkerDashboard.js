@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, RefreshControl, StyleSheet, Alert, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, RefreshControl, StyleSheet, Alert, TouchableOpacity, Image, ActivityIndicator, Modal } from 'react-native';
 import { Colors } from '../../theme/colors';
 import { jobsAPI, attendanceAPI, workerAPI, getBaseUrl, authAPI } from '../../api/client';
 import AppFooter from '../../components/AppFooter';
