@@ -172,7 +172,9 @@ exports.createContract = async (req, res) => {
         durationMinutes: parseInt(durationMinutes)
       },
       notes,
-      pricePerHour: parseFloat(pricePerHour) || 25
+      pricePerHour: parseFloat(pricePerHour) || 25,
+      category: req.body.category || 'Cleaning',
+      status: workers.length > 0 ? 'Assigned' : 'Contractor Assigned'
     });
 
     // Create Worker Assignments with standard (2 hours = 120 mins) or urgent (10 mins) timers
@@ -288,26 +290,12 @@ exports.getContracts = async (req, res) => {
 exports.getClientRequests = async (req, res) => {
   try {
     const ClientRequest = require('../models/ClientRequest');
-    const tags = req.user.tags || [];
-    const locations = req.user.locations || [];
     
+    // Bypassing contractor category and location filters to allow posting to all contractors
     const filter = { 
       status: 'pending',
       'offers.contractor': { $ne: req.user.id }
     };
-
-    if (tags.length > 0) {
-      filter.category = { $in: tags };
-    }
-    
-    if (locations.length > 0) {
-      const escapedLocs = locations
-        .map(loc => loc.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'))
-        .filter(Boolean);
-      if (escapedLocs.length > 0) {
-        filter.location = { $regex: escapedLocs.join('|'), $options: 'i' };
-      }
-    }
 
     const requests = await ClientRequest.find(filter)
       .populate('client', 'name email phoneNumber')
@@ -883,3 +871,178 @@ exports.renewPackage = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+const updateContractStatuses = async (contractorId) => {
+  const now = new Date();
+  const contracts = await Contract.find({
+    contractorId,
+    status: { $nin: ['Handed Over', 'Completed', 'Cancelled'] }
+  });
+  
+  for (const contract of contracts) {
+    const hasWorkers = contract.workers && contract.workers.length > 0;
+    
+    let hasStarted = false;
+    if (contract.schedule && contract.schedule.date && contract.schedule.startTime) {
+      const projDate = new Date(contract.schedule.date);
+      const [hours, minutes] = contract.schedule.startTime.split(':').map(Number);
+      projDate.setHours(hours, minutes, 0, 0);
+      hasStarted = now >= projDate;
+    }
+    
+    let targetStatus = contract.status;
+    if (hasWorkers && hasStarted) {
+      targetStatus = 'Ongoing';
+    } else if (hasWorkers) {
+      targetStatus = 'Assigned';
+    } else {
+      targetStatus = 'Contractor Assigned';
+    }
+    
+    if (contract.status !== targetStatus) {
+      contract.status = targetStatus;
+      await contract.save();
+    }
+  }
+};
+
+exports.getOngoingProjects = async (req, res) => {
+  try {
+    await updateContractStatuses(req.user.id);
+    const projects = await Contract.find({ contractorId: req.user.id, status: 'Ongoing' })
+      .populate('workers', 'name email phoneNumber status')
+      .populate('packageId')
+      .sort('-schedule.date');
+    res.status(200).json({ success: true, count: projects.length, projects });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getHandedOverProjects = async (req, res) => {
+  try {
+    await updateContractStatuses(req.user.id);
+    const projects = await Contract.find({
+      contractorId: req.user.id,
+      status: { $in: ['Handed Over', 'Completed'] }
+    })
+      .populate('workers', 'name email phoneNumber status')
+      .populate('packageId')
+      .sort('-handoverDate -createdAt');
+    res.status(200).json({ success: true, count: projects.length, projects });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getActiveGpsProjects = async (req, res) => {
+  try {
+    await updateContractStatuses(req.user.id);
+    const ongoingContracts = await Contract.find({ contractorId: req.user.id, status: 'Ongoing' })
+      .populate('workers', 'name email phoneNumber status')
+      .populate('packageId');
+      
+    const activeGpsProjects = [];
+    
+    for (const contract of ongoingContracts) {
+      const activeAssignments = await WorkerAssignment.find({
+        contractId: contract._id,
+        response: 'accepted',
+        checkInTime: { $exists: true, $ne: null },
+        checkOutTime: null
+      }).populate('workerId', 'name email phoneNumber status');
+      
+      if (activeAssignments.length > 0) {
+        activeGpsProjects.push({
+          ...contract.toObject(),
+          activeAssignments: activeAssignments.map(a => ({
+            _id: a._id,
+            workerId: a.workerId,
+            workerStatus: a.workerStatus,
+            checkInTime: a.checkInTime,
+            totalViolations: a.totalViolations,
+            timeSpentOutsideMinutes: a.timeSpentOutsideMinutes,
+            actualWorkedMinutes: a.actualWorkedMinutes
+          }))
+        });
+      }
+    }
+    
+    res.status(200).json({ success: true, count: activeGpsProjects.length, projects: activeGpsProjects });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.handoverProject = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const contract = await Contract.findById(id);
+    if (!contract) {
+      return res.status(404).json({ success: false, message: 'Project not found' });
+    }
+    
+    if (contract.contractorId.toString() !== req.user.id) {
+      return res.status(403).json({ success: false, message: 'Not authorized to handover this project' });
+    }
+    
+    if (contract.status !== 'Ongoing') {
+      return res.status(400).json({ success: false, message: 'Only ongoing projects can be handed over' });
+    }
+    
+    const now = new Date();
+    contract.status = 'Handed Over';
+    contract.handoverDate = now;
+    
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    contract.handoverTime = `${hours}:${minutes}`;
+    
+    await contract.save();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Project successfully handed over.',
+      contract
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * @desc    Get contractor notifications
+ * @route   GET /api/contractor/notifications
+ * @access  Private/Contractor
+ */
+exports.getNotifications = async (req, res) => {
+  try {
+    const Notification = require('../models/Notification');
+    const notifications = await Notification.find({ userId: req.user.id })
+      .sort('-createdAt')
+      .limit(50);
+    res.json({ success: true, notifications });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * @desc    Mark a specific contractor notification as read
+ * @route   PUT /api/contractor/notifications/:id/read
+ * @access  Private/Contractor
+ */
+exports.markNotificationRead = async (req, res) => {
+  try {
+    const Notification = require('../models/Notification');
+    const notification = await Notification.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user.id },
+      { read: true },
+      { new: true }
+    );
+    res.json({ success: true, notification });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+

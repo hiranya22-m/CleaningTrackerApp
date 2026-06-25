@@ -104,6 +104,14 @@ const ContractorDashboard = ({ user, onLogout }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // ── Rebuilt Project Categories States ──
+  const [ongoingProjects, setOngoingProjects] = useState([]);
+  const [handedOverProjects, setHandedOverProjects] = useState([]);
+  const [activeGpsProjects, setActiveGpsProjects] = useState([]);
+  const [selectedGpsProject, setSelectedGpsProject] = useState(null);
+  const [assigningWorkerMap, setAssigningWorkerMap] = useState({}); // contractId -> workerId to assign
+
+
   // ── Contract Form State ─────────────────────────────────────────────────────
   const [clientName, setClientName] = useState(user?.companyName || user?.name || '');
   const [clientPhone, setClientPhone] = useState(user?.phoneNumber || '');
@@ -159,6 +167,12 @@ const ContractorDashboard = ({ user, onLogout }) => {
   const [showHandoverDropdown, setShowHandoverDropdown] = useState(false);
   const [showPeriodDropdown, setShowPeriodDropdown] = useState(false);
   const [assigningWorker, setAssigningWorker] = useState(false);
+
+  // --- Notifications States ---
+  const [notifications, setNotifications] = useState([]);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [loadingNotifications, setLoadingNotifications] = useState(false);
 
   useEffect(() => {
     const listener = (markHandled) => {
@@ -386,24 +400,47 @@ const ContractorDashboard = ({ user, onLogout }) => {
       const contractRes = await contractorAPI.getContracts();
       if (contractRes.success) {
         setContracts(contractRes.contracts);
-        
-        // Auto-select first active or pending contract for GPS tracking
-        const active = contractRes.contracts.find(c => c.status === 'active' || c.status === 'pending');
-        if (active && !selectedContractForMap) {
-          setSelectedContractForMap(active);
-          fetchGpsHistory(active._id, active);
-        } else if (selectedContractForMap) {
-          // Refresh coordinates/status for the already selected contract
-          const updatedSelected = contractRes.contracts.find(c => c._id === selectedContractForMap._id);
-          if (updatedSelected) {
-            setSelectedContractForMap(updatedSelected);
-            fetchGpsHistory(updatedSelected._id, updatedSelected);
+      }
+
+      // Fetch ongoing projects
+      const ongoingRes = await contractorAPI.getOngoingProjects();
+      if (ongoingRes.success) {
+        setOngoingProjects(ongoingRes.projects);
+      }
+
+      // Fetch handed over projects
+      const handedOverRes = await contractorAPI.getHandedOverProjects();
+      if (handedOverRes.success) {
+        setHandedOverProjects(handedOverRes.projects);
+      }
+
+      // Fetch active GPS projects
+      const gpsRes = await contractorAPI.getActiveGpsProjects();
+      if (gpsRes.success) {
+        setActiveGpsProjects(gpsRes.projects);
+        if (gpsRes.projects.length > 0) {
+          const stillActive = gpsRes.projects.some(p => p._id === selectedGpsProject?._id);
+          if (!stillActive) {
+            setSelectedGpsProject(gpsRes.projects[0]);
+            fetchGpsHistory(gpsRes.projects[0]._id, gpsRes.projects[0]);
           } else {
-            fetchGpsHistory(selectedContractForMap._id);
+            const updated = gpsRes.projects.find(p => p._id === selectedGpsProject._id);
+            setSelectedGpsProject(updated);
+            fetchGpsHistory(updated._id, updated);
           }
+        } else {
+          setSelectedGpsProject(null);
         }
       }
+
+      // Fetch client requests
+      const requestsRes = await contractorAPI.getClientRequests();
+      if (requestsRes.success) {
+        setClientRequests(requestsRes.requests);
+      }
+
       await fetchRoster();
+      await fetchNotifications();
       setRefreshing(false);
     } catch (e) {
       setRefreshing(false);
@@ -552,12 +589,28 @@ const ContractorDashboard = ({ user, onLogout }) => {
       );
     });
 
-    newSocket.on(`contractor_notification:${user.id}`, ({ message, response }) => {
+    newSocket.on(`contractor_notification:${user.id}`, (payload) => {
+      const msg = payload.message;
+      const title = payload.title || (payload.response === 'accepted' ? 'Contract Accepted! 🧼' : 'Notification');
+      const isAccepted = payload.type === 'contract_accepted' || payload.response === 'accepted';
+
       Alert.alert(
-        response === 'accepted' ? 'Contract Accepted! 🧼' : 'Request Declined ❌',
-        message
+        title,
+        msg,
+        [
+          {
+            text: isAccepted ? 'Assign Crew Now' : 'OK',
+            onPress: () => {
+              if (isAccepted) {
+                navigateToTab('projects');
+              }
+            }
+          },
+          { text: 'Close', style: 'cancel' }
+        ]
       );
       loadInitialData();
+      fetchNotifications();
     });
 
     return () => newSocket.disconnect();
@@ -1169,6 +1222,69 @@ const ContractorDashboard = ({ user, onLogout }) => {
     }
   };
 
+  const getProjectProgress = (project) => {
+    if (!project.assignments || project.assignments.length === 0) return 0;
+    const activeAssign = project.assignments.find(a => a.response === 'accepted' && a.checkInTime);
+    if (!activeAssign) return 0;
+    const checkIn = new Date(activeAssign.checkInTime);
+    const checkOut = activeAssign.checkOutTime ? new Date(activeAssign.checkOutTime) : new Date();
+    const diffMs = checkOut - checkIn;
+    const workedMins = Math.max(0, Math.floor(diffMs / 1000 / 60));
+    const duration = project.schedule?.durationMinutes || 120;
+    return Math.min(100, Math.round((workedMins / duration) * 100));
+  };
+
+  const handleAssignWorkerToContract = async (contractId) => {
+    const workerId = assigningWorkerMap[contractId];
+    if (!workerId) {
+      Alert.alert('Required', 'Please select a crew member to assign');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await contractorAPI.assignWorker(workerId, contractId);
+      if (res.success) {
+        Alert.alert('Worker Assigned! 🧼', 'Crew assignment request successfully dispatched.');
+        setAssigningWorkerMap(prev => {
+          const updated = { ...prev };
+          delete updated[contractId];
+          return updated;
+        });
+        loadInitialData();
+      } else {
+        Alert.alert('Assignment Failed', res.message || 'Error occurred');
+      }
+    } catch (e) {
+      Alert.alert('Error', e.response?.data?.message || 'Server error assigning worker');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleHandoverProjectClick = async () => {
+    if (!handoverContractId) {
+      Alert.alert('Required', 'Please select a project to hand over');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await contractorAPI.handoverProject(handoverContractId);
+      if (res.success) {
+        Alert.alert('Project Handed Over! 🧼', 'Project successfully handed over.');
+        setHandoverContractId('');
+        loadInitialData();
+      } else {
+        Alert.alert('Handover Failed', res.message || 'Error occurred');
+      }
+    } catch (e) {
+      Alert.alert('Error', e.response?.data?.message || 'Server error handing over project');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const [openDropdownContractId, setOpenDropdownContractId] = useState(null);
+
   const handleHandoverProject = async (workerId) => {
     if (!handoverContractId) {
       Alert.alert('Required', 'Please select a project to handover');
@@ -1258,6 +1374,43 @@ const ContractorDashboard = ({ user, onLogout }) => {
     }
   };
 
+  const fetchNotifications = async () => {
+    setLoadingNotifications(true);
+    try {
+      const res = await contractorAPI.getNotifications();
+      if (res.success) {
+        setNotifications(res.notifications || []);
+        const unread = (res.notifications || []).filter(n => !n.read).length;
+        setUnreadNotificationsCount(unread);
+      }
+    } catch (e) {
+      console.warn('Failed to load contractor notifications:', e.message);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const handleNotificationClick = async (notif) => {
+    try {
+      await contractorAPI.markNotificationRead(notif._id);
+      // Update local count and state
+      setNotifications(prev => prev.map(n => n._id === notif._id ? { ...n, read: true } : n));
+      
+      // Calculate updated count
+      setUnreadNotificationsCount(prev => Math.max(0, prev - 1));
+      
+      // Close notifications list
+      setShowNotificationsModal(false);
+      
+      // If accepted offer, take them directly to projects tab to assign workers
+      if (notif.type === 'contract_accepted') {
+        navigateToTab('projects');
+      }
+    } catch (e) {
+      console.warn('Failed to handle notification click:', e.message);
+    }
+  };
+
   const fetchClientRequests = async () => {
     setLoadingRequests(true);
     try {
@@ -1281,7 +1434,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
       if (res.success) {
         Alert.alert('Bid Submitted! 💸', 'Your price offer has been successfully dispatched to the client.');
         setBidPrices(prev => ({ ...prev, [requestId]: '' }));
-        fetchClientRequests();
+        loadInitialData();
       } else {
         Alert.alert('Bid Failed', res.message);
       }
@@ -1378,6 +1531,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
 
   // Switch tab loader hook
   useEffect(() => {
+    fetchNotifications();
     if (activeTab === 'roster') {
       fetchRoster();
     } else if (activeTab === 'clientRequests') {
@@ -2529,12 +2683,41 @@ const ContractorDashboard = ({ user, onLogout }) => {
           </View>
           <View style={styles.titleCol}>
             <Text style={styles.portalTitle}>Contractor Hub</Text>
-            <Text style={styles.portalSubtitle}>{user.companyName || 'Corporate Partner'}</Text>
+            <Text style={styles.portalSubtitle}>{profileUser?.companyName || user?.companyName || 'Corporate Partner'}</Text>
           </View>
         </View>
-        <TouchableOpacity style={styles.logoutBtn} onPress={onLogout} activeOpacity={0.7}>
-          <Text style={styles.logoutText}>Logout ➔</Text>
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          {onboardingStep === null && (
+            <TouchableOpacity 
+              style={{ position: 'relative', padding: 6 }} 
+              activeOpacity={0.7}
+              onPress={() => setShowNotificationsModal(true)}
+            >
+              <Text style={{ fontSize: 20 }}>🔔</Text>
+              {unreadNotificationsCount > 0 && (
+                <View style={{
+                  position: 'absolute',
+                  top: -2,
+                  right: -2,
+                  backgroundColor: '#EF4444',
+                  borderRadius: 8,
+                  minWidth: 16,
+                  height: 16,
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  paddingHorizontal: 3
+                }}>
+                  <Text style={{ color: '#FFFFFF', fontSize: 9, fontWeight: '900' }}>
+                    {unreadNotificationsCount}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.logoutBtn} onPress={onLogout} activeOpacity={0.7}>
+            <Text style={styles.logoutText}>Logout ➔</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -2546,7 +2729,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
           <RefreshControl refreshing={refreshing} onRefresh={activeTab === 'newContract' ? handleFormRefresh : loadInitialData} tintColor={Colors.primary} />
         }
       >
-      {/* subscribe to global back-scroll emitter */}
+        {/* subscribe to global back-scroll emitter */}
         <Animated.View style={{ opacity: fadeAnim }}>
           {onboardingStep !== null ? (
             onboardingStep === 1 ? (
@@ -2560,157 +2743,375 @@ const ContractorDashboard = ({ user, onLogout }) => {
                   TAB 1: PROJECTS (Current Contracts list)
                   ────────────────────────────────────────────────────────────────── */}
               {activeTab === 'projects' && (
-            <View>
-              {(() => {
-                const currentPkgName = packages.find(p => p._id === (profileUser?.packageId?._id || profileUser?.packageId))?.name || subscription?.packageName || 'Basic';
-                const limit = currentPkgName === 'Premium' ? 'Unlimited' : 5;
-                return (
-                  <View>
-                    <Text style={styles.rosterTitle}>Crew Members Roster ({rosterWorkers.length} / {limit})</Text>
-
-                    {/* Subscription Details Card */}
-                    <View style={styles.packageCard}>
-                      <View style={styles.packageHeader}>
-                        <Text style={styles.packageName}>Subscription Tier: {currentPkgName.toUpperCase()}</Text>
-                        {currentPkgName === 'Basic' && (
-                          <TouchableOpacity style={styles.packageUpgradeBtn} onPress={handleUpgradeSubscription}>
-                            <Text style={styles.packageUpgradeText}>Upgrade Premium</Text>
-                          </TouchableOpacity>
-                        )}
+                <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+                  {/* 1. Dashboard Statistics */}
+                  <View style={{ marginBottom: 20 }}>
+                    <Text style={[styles.sectionTitle, { fontSize: 18, color: Colors.secondary, marginBottom: 12 }]}>📊 Dashboard Statistics</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                      <View style={{ width: '48%', backgroundColor: '#FFFFFF', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 10, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 }}>
+                        <Text style={{ fontSize: 24, fontWeight: '800', color: Colors.primary }}>{ongoingProjects.length}</Text>
+                        <Text style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>Ongoing Projects</Text>
                       </View>
-                      <Text style={styles.packageLimitText}>Crew limit: {rosterWorkers.length} of {limit} crew members associated</Text>
-                      
-                      <View style={styles.priceDivider} />
-                      
-                      {subscription && subscription.renewsOn && (
-                        <View style={{ marginTop: 8 }}>
-                          <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600' }}>
-                            Plan Status: <Text style={{ color: subscription.planAutoRenew ? '#10B981' : '#F59E0B', fontWeight: '800' }}>
-                              {subscription.planAutoRenew ? 'Active (Auto-Renews Monthly)' : 'Active Until Expiry'}
+                      <View style={{ width: '48%', backgroundColor: '#FFFFFF', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 10, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 }}>
+                        <Text style={{ fontSize: 24, fontWeight: '800', color: '#8B5CF6' }}>{handedOverProjects.filter(p => p.status === 'Handed Over').length}</Text>
+                        <Text style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>Handed Over Projects</Text>
+                      </View>
+                      <View style={{ width: '48%', backgroundColor: '#FFFFFF', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 10, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 }}>
+                        <Text style={{ fontSize: 24, fontWeight: '800', color: '#10B981' }}>{handedOverProjects.filter(p => p.status === 'Completed').length}</Text>
+                        <Text style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>Completed Projects</Text>
+                      </View>
+                      <View style={{ width: '48%', backgroundColor: '#FFFFFF', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 10, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 }}>
+                        <Text style={{ fontSize: 24, fontWeight: '800', color: '#64748B' }}>{rosterWorkers.length}</Text>
+                        <Text style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>Crew Members</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* 2. New Client Requests */}
+                  <View style={{ marginBottom: 20 }}>
+                    <Text style={[styles.sectionTitle, { fontSize: 18, color: Colors.secondary, marginBottom: 12 }]}>📥 New Client Requests</Text>
+                    {clientRequests.length === 0 ? (
+                      <View style={{ backgroundColor: '#F1F5F9', padding: 16, borderRadius: 10, alignItems: 'center' }}>
+                        <Text style={{ color: '#64748B', fontSize: 14 }}>No new client requests currently.</Text>
+                      </View>
+                    ) : (
+                      clientRequests.map(r => (
+                        <View key={r._id} style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 12, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: Colors.primary }}>🧹 {r.category} Request</Text>
+                            <Text style={{ fontSize: 11, backgroundColor: '#E0F2FE', color: '#0369A1', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, fontWeight: '700' }}>PENDING BID</Text>
+                          </View>
+                          <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 4 }}><Text style={{ fontWeight: '700' }}>Client:</Text> {r.client?.name}</Text>
+                          <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 4 }}><Text style={{ fontWeight: '700' }}>Location:</Text> {r.location}</Text>
+                          <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 4 }}><Text style={{ fontWeight: '700' }}>Scheduled Date:</Text> {new Date(r.date).toLocaleDateString()} at {r.time}</Text>
+                          <Text style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginVertical: 6 }}>"{r.description}"</Text>
+                          
+                          {/* Bidding Offer Form */}
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 10, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 10 }}>
+                            <TextInput
+                              style={{ flex: 1, height: 38, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 6, paddingHorizontal: 10, fontSize: 13, color: '#0F172A', marginRight: 10 }}
+                              placeholder="Enter Price Bid ($)"
+                              keyboardType="numeric"
+                              value={bidPrices[r._id] || ''}
+                              onChangeText={txt => setBidPrices(prev => ({ ...prev, [r._id]: txt }))}
+                            />
+                            <TouchableOpacity
+                              style={{ backgroundColor: Colors.primary, height: 38, paddingHorizontal: 16, borderRadius: 6, justifyContent: 'center', alignItems: 'center' }}
+                              onPress={() => handleSubmitBid(r._id)}
+                            >
+                              <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Submit Offer</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      ))
+                    )}
+                  </View>
+
+                  {/* 3. Assign Crew Members */}
+                  <View style={{ marginBottom: 20 }}>
+                    <Text style={[styles.sectionTitle, { fontSize: 18, color: Colors.secondary, marginBottom: 12 }]}>👥 Assign Crew Members to Projects</Text>
+                    {(() => {
+                      const unassignedContracts = contracts.filter(c => c.status === 'Contractor Assigned' || c.status === 'pending');
+                      if (unassignedContracts.length === 0) {
+                        return (
+                          <View style={{ backgroundColor: '#F1F5F9', padding: 16, borderRadius: 10, alignItems: 'center' }}>
+                            <Text style={{ color: '#64748B', fontSize: 14 }}>All projects have crew members assigned.</Text>
+                          </View>
+                        );
+                      }
+                      return unassignedContracts.map(c => {
+                        const selectedWorkerId = assigningWorkerMap[c._id];
+                        const selectedWorkerName = rosterWorkers.find(w => w._id === selectedWorkerId)?.name || 'Select Crew Member';
+                        const isOpen = openDropdownContractId === c._id;
+                        
+                        return (
+                          <View key={c._id} style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 12, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1, zIndex: isOpen ? 50 : 1 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: Colors.secondary, marginBottom: 6 }}>🧹 {c.category || 'Cleaning'} - {c.clientName}</Text>
+                            <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Location:</Text> {c.location?.address}</Text>
+                            <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 8 }}><Text style={{ fontWeight: '700' }}>Date/Time:</Text> {new Date(c.schedule?.date).toLocaleDateString()} at {c.schedule?.startTime}</Text>
+                            
+                            {/* Worker Custom Dropdown Selection */}
+                            <View style={{ position: 'relative' }}>
+                              <TouchableOpacity
+                                style={{ height: 40, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 6, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, backgroundColor: '#FFFFFF' }}
+                                onPress={() => setOpenDropdownContractId(isOpen ? null : c._id)}
+                              >
+                                <Text style={{ fontSize: 13, color: selectedWorkerId ? '#0F172A' : '#94A3B8' }}>{selectedWorkerName}</Text>
+                                <Text style={{ fontSize: 12, color: '#64748B' }}>{isOpen ? '▲' : '▼'}</Text>
+                              </TouchableOpacity>
+                              
+                              {isOpen && (
+                                <View style={{ position: 'absolute', top: 44, left: 0, right: 0, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 6, maxHeight: 150, zIndex: 100, shadowColor: '#0F172A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 5 }}>
+                                  <ScrollView nestedScrollEnabled={true}>
+                                    {rosterWorkers.map(w => (
+                                      <TouchableOpacity
+                                        key={w._id}
+                                        style={{ paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
+                                        onPress={() => {
+                                          setAssigningWorkerMap(prev => ({ ...prev, [c._id]: w._id }));
+                                          setOpenDropdownContractId(null);
+                                        }}
+                                      >
+                                        <Text style={{ fontSize: 13, color: '#0F172A' }}>{w.name} ({w.email})</Text>
+                                      </TouchableOpacity>
+                                    ))}
+                                  </ScrollView>
+                                </View>
+                              )}
+                            </View>
+
+                            {selectedWorkerId ? (
+                              <TouchableOpacity
+                                style={{ backgroundColor: Colors.primary, height: 38, borderRadius: 6, justifyContent: 'center', alignItems: 'center', marginTop: 10 }}
+                                onPress={() => handleAssignWorkerToContract(c._id)}
+                              >
+                                <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>Assign Crew Member ➔</Text>
+                              </TouchableOpacity>
+                            ) : null}
+                          </View>
+                        );
+                      });
+                    })()}
+                  </View>
+
+                  {/* 4. Ongoing Projects */}
+                  <View style={{ marginBottom: 20 }}>
+                    <Text style={[styles.sectionTitle, { fontSize: 18, color: Colors.secondary, marginBottom: 12 }]}>🧹 Ongoing Projects</Text>
+                    {ongoingProjects.length === 0 ? (
+                      <View style={{ backgroundColor: '#F1F5F9', padding: 16, borderRadius: 10, alignItems: 'center' }}>
+                        <Text style={{ color: '#64748B', fontSize: 14 }}>No active projects currently.</Text>
+                      </View>
+                    ) : (
+                      ongoingProjects.map(project => {
+                        const progress = getProjectProgress(project);
+                        const assignedCrew = project.workers?.map(w => w.name).join(', ') || 'Unassigned';
+                        return (
+                          <View key={project._id} style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 12, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 }}>
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: Colors.primary, marginBottom: 6 }}>🧼 {project.category || 'Cleaning'} - {project.clientName}</Text>
+                            <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Client:</Text> {project.clientName}</Text>
+                            <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Service Category:</Text> {project.category || 'Cleaning'}</Text>
+                            <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Location:</Text> {project.location?.address}</Text>
+                            <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Date:</Text> {new Date(project.schedule?.date).toLocaleDateString()}</Text>
+                            <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Start Time:</Text> {project.schedule?.startTime}</Text>
+                            <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 4 }}><Text style={{ fontWeight: '700' }}>Assigned Crew:</Text> {assignedCrew}</Text>
+                            
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, marginBottom: 4 }}>
+                              <Text style={{ fontSize: 12, color: '#64748B' }}>Status: <Text style={{ fontWeight: '700', color: '#F59E0B' }}>{project.status}</Text></Text>
+                              <Text style={{ fontSize: 12, fontWeight: '700', color: Colors.primary }}>{progress}% Progress</Text>
+                            </View>
+                            
+                            {/* Progress bar */}
+                            <View style={{ height: 6, backgroundColor: '#E2E8F0', borderRadius: 3, overflow: 'hidden' }}>
+                              <View style={{ width: `${progress}%`, height: '100%', backgroundColor: Colors.primary }} />
+                            </View>
+                          </View>
+                        );
+                      })
+                    )}
+                  </View>
+
+                  {/* 5. Hand Over Project */}
+                  {ongoingProjects.length > 0 && (
+                    <View style={{ marginBottom: 20 }}>
+                      <Text style={[styles.sectionTitle, { fontSize: 18, color: Colors.secondary, marginBottom: 12 }]}>🤝 Hand Over Project</Text>
+                      <View style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1, zIndex: 10 }}>
+                        <Text style={{ fontSize: 13, color: '#475569', marginBottom: 8 }}>Select an ongoing project to hand over to the client:</Text>
+                        
+                        {/* Custom Dropdown Selection */}
+                        <View style={{ position: 'relative', marginBottom: 10 }}>
+                          <TouchableOpacity
+                            style={{ height: 40, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 6, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, backgroundColor: '#FFFFFF' }}
+                            onPress={() => setShowHandoverDropdown(!showHandoverDropdown)}
+                          >
+                            <Text style={{ fontSize: 13, color: handoverContractId ? '#0F172A' : '#94A3B8' }}>
+                              {handoverContractId ? 
+                                (() => {
+                                  const p = ongoingProjects.find(pr => pr._id === handoverContractId);
+                                  return p ? `${p.category || 'Cleaning'} - ${p.location?.address?.split(',')[0] || p.clientName}` : 'Selected Project';
+                                })() : 
+                                'Select Ongoing Project'
+                              }
                             </Text>
-                          </Text>
-                          <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600', marginTop: 4 }}>
-                            {subscription.planAutoRenew ? 'Next Renewal' : 'Expires On'}:{' '}
-                            <Text style={{ color: '#0F172A', fontWeight: '800' }}>
-                              {new Date(subscription.renewsOn).toLocaleDateString()}
-                            </Text>
-                          </Text>
-                          <Text style={{ fontSize: 12, color: '#475569', fontWeight: '600', marginTop: 4 }}>
-                            Next Charge: <Text style={{ color: '#0F172A', fontWeight: '800' }}>${subscription.nextChargeAmount}/month</Text>
-                          </Text>
+                            <Text style={{ fontSize: 12, color: '#64748B' }}>{showHandoverDropdown ? '▲' : '▼'}</Text>
+                          </TouchableOpacity>
+                          
+                          {showHandoverDropdown && (
+                            <View style={{ position: 'absolute', top: 44, left: 0, right: 0, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 6, maxHeight: 150, zIndex: 100, shadowColor: '#0F172A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 6, elevation: 5 }}>
+                              <ScrollView nestedScrollEnabled={true}>
+                                {ongoingProjects.map(p => (
+                                  <TouchableOpacity
+                                    key={p._id}
+                                    style={{ paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}
+                                    onPress={() => {
+                                      setHandoverContractId(p._id);
+                                      setShowHandoverDropdown(false);
+                                    }}
+                                  >
+                                    <Text style={{ fontSize: 13, color: '#0F172A' }}>{p.category || 'Cleaning'} - {p.location?.address?.split(',')[0] || p.clientName}</Text>
+                                  </TouchableOpacity>
+                                ))}
+                              </ScrollView>
+                            </View>
+                          )}
+                        </View>
+
+                        {handoverContractId ? (
+                          <TouchableOpacity
+                            style={{ backgroundColor: '#10B981', height: 40, borderRadius: 6, justifyContent: 'center', alignItems: 'center' }}
+                            onPress={handleHandoverProjectClick}
+                          >
+                            <Text style={{ color: '#FFFFFF', fontSize: 13, fontWeight: '700' }}>[ Hand Over Project ]</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* 6. Handed Over Projects */}
+                  <View style={{ marginBottom: 20 }}>
+                    <Text style={[styles.sectionTitle, { fontSize: 18, color: Colors.secondary, marginBottom: 12 }]}>📦 Handed Over Projects</Text>
+                    {handedOverProjects.length === 0 ? (
+                      <View style={{ backgroundColor: '#F1F5F9', padding: 16, borderRadius: 10, alignItems: 'center' }}>
+                        <Text style={{ color: '#64748B', fontSize: 14 }}>No handed over or completed projects yet.</Text>
+                      </View>
+                    ) : (
+                      handedOverProjects.map(project => (
+                        <View key={project._id} style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 12, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 }}>
+                          <Text style={{ fontSize: 14, fontWeight: '800', color: '#1E293B', marginBottom: 6 }}>🗂️ {project.category || 'Cleaning'} - {project.clientName}</Text>
+                          <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Client:</Text> {project.clientName}</Text>
+                          <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Location:</Text> {project.location?.address}</Text>
+                          <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Date/Time:</Text> {new Date(project.schedule?.date).toLocaleDateString()} at {project.schedule?.startTime}</Text>
+                          <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Crew Members:</Text> {project.workers?.map(w => w.name).join(', ') || 'None'}</Text>
+                          {project.handoverDate && (
+                            <Text style={{ fontSize: 13, color: '#0F172A', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Handover Date:</Text> {new Date(project.handoverDate).toLocaleDateString()} at {project.handoverTime || 'N/A'}</Text>
+                          )}
+                          <Text style={{ fontSize: 13, color: '#475569', marginTop: 4 }}>Status: <Text style={{ fontWeight: '700', color: Colors.success }}>{project.status}</Text></Text>
+                        </View>
+                      ))
+                    )}
+                  </View>
+
+                  {/* 7. GPS Tracking (only visible if ongoing project is active and being worked on) */}
+                  {activeGpsProjects.length > 0 && selectedGpsProject && (
+                    <View style={{ marginBottom: 20 }}>
+                      <Text style={[styles.sectionTitle, { fontSize: 18, color: Colors.secondary, marginBottom: 12 }]}>📡 Real-Time GPS Tracking</Text>
+                      
+                      {activeGpsProjects.length > 1 && (
+                        <View style={{ marginBottom: 12 }}>
+                          <Text style={{ fontSize: 12, color: '#64748B', marginBottom: 4 }}>Select active project to display:</Text>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            {activeGpsProjects.map(p => (
+                              <TouchableOpacity
+                                key={p._id}
+                                style={{
+                                  backgroundColor: selectedGpsProject._id === p._id ? Colors.primary : '#E2E8F0',
+                                  paddingHorizontal: 12,
+                                  paddingVertical: 6,
+                                  borderRadius: 20,
+                                  marginRight: 8
+                                }}
+                                onPress={() => {
+                                  setSelectedGpsProject(p);
+                                  setMockProgress(0);
+                                  fetchGpsHistory(p._id, p);
+                                }}
+                              >
+                                <Text style={{ color: selectedGpsProject._id === p._id ? '#FFFFFF' : '#475569', fontSize: 12, fontWeight: '700' }}>
+                                  🏢 {p.clientName}
+                                </Text>
+                              </TouchableOpacity>
+                            ))}
+                          </ScrollView>
                         </View>
                       )}
 
-                      <View style={styles.packageRenewRow}>
-                        <View style={styles.autoRenewToggle}>
-                          <Text style={styles.autoRenewLabel}>Auto-Renew:</Text>
-                          <TouchableOpacity
-                            onPress={() => handleToggleAutoRenew(subscription?.planAutoRenew !== false)}
-                          >
-                            <Text style={subscription?.planAutoRenew !== false ? styles.autoRenewBadgeActive : styles.autoRenewBadgeInactive}>
-                              {subscription?.planAutoRenew !== false ? '● ON' : '○ OFF'}
-                            </Text>
-                          </TouchableOpacity>
-                        </View>
+                      {(() => {
+                        const project = selectedGpsProject;
+                        return (
+                          <View style={{ backgroundColor: '#FFFFFF', padding: 16, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                              <Text style={{ fontSize: 14, fontWeight: '800', color: Colors.secondary }}>🧹 {project.category || 'Cleaning'} - {project.clientName}</Text>
+                              <View style={{ backgroundColor: '#EF4444', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4 }}>
+                                <Text style={{ color: '#FFFFFF', fontSize: 10, fontWeight: '800' }}>● LIVE TRACKING</Text>
+                              </View>
+                            </View>
+                            <Text style={{ fontSize: 13, color: '#475569', marginBottom: 10 }}>Assigned Crew: {project.workers?.map(w => w.name).join(', ')}</Text>
+                            
+                            {project.workers?.map(w => {
+                              const isAccepted = project.assignments?.some(
+                                a => (a.workerId?._id || a.workerId) === w._id && a.response === 'accepted'
+                              );
+                              if (!isAccepted) return null;
 
-                        <TouchableOpacity 
-                          style={styles.renewBtn} 
-                          onPress={handleRenewSubscriptionNow}
-                        >
-                          <Text style={styles.renewBtnText}>Renew Now ➔</Text>
-                        </TouchableOpacity>
-                      </View>
-
-                      {profileUser && profileUser.planTotalBilled > 0 ? (
-                        <Text style={styles.earlySelectChargeText}>
-                          Total Billed: ${profileUser.planTotalBilled}
-                        </Text>
-                      ) : null}
-                    </View>
-
-                    {/* Add Crew search */}
-                    <View style={styles.addCrewSection}>
-                      <Text style={styles.addCrewTitle}>Hire/Add Crew Member (by email/name)</Text>
-                      <View style={styles.addCrewRow}>
-                        <TextInput
-                          style={styles.addCrewInput}
-                          value={searchWorkerEmail}
-                          onChangeText={handleGlobalSearchWorkers}
-                          placeholder="Enter worker's name or email"
-                          placeholderTextColor="#94A3B8"
-                        />
-                      </View>
-
-                      {foundWorkerList.map(w => (
-                        <View key={w._id} style={styles.searchResultCard}>
-                          <View>
-                            <Text style={{ fontSize: 13, fontWeight: '800', color: '#0F172A' }}>{w.name}</Text>
-                            <Text style={{ fontSize: 11, color: '#64748B' }}>{w.email}</Text>
+                              const liveInfo = liveWorkers[w._id] || {};
+                              const lat = liveInfo.lat || project.location?.coordinates?.lat || NY_LAT;
+                              const lng = liveInfo.lng || project.location?.coordinates?.lng || NY_LNG;
+                              const geofence = liveInfo.status === 'Left Work Area' ? 'outside_breach' : 'inside';
+                              
+                              // Telemetry variables
+                              const distance = liveInfo.distanceToClient !== undefined ? `${liveInfo.distanceToClient}m` : 'Calculating...';
+                              const timeOnSite = `${liveInfo.workedMinutes || 0} mins`;
+                              
+                              return (
+                                <View key={w._id} style={{ marginBottom: 16, borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 12 }}>
+                                  <Text style={{ fontSize: 13, fontWeight: '800', color: Colors.secondary, marginBottom: 8 }}>🛰️ Dispatch Tracking Radar: {w.name}</Text>
+                                  
+                                  <MapViewContainer
+                                    clientCoords={[project.location?.coordinates?.lng || NY_LNG, project.location?.coordinates?.lat || NY_LAT]}
+                                    workerCoords={[lng, lat]}
+                                    clientName={project.clientName}
+                                    workerName={w.name}
+                                    geofenceRadius={50}
+                                    geofenceStatus={geofence}
+                                    height={200}
+                                  />
+                                  
+                                  <View style={{ backgroundColor: '#F8FAFC', padding: 10, borderRadius: 8, marginTop: 8, borderWidth: 1, borderColor: '#F1F5F9' }}>
+                                    <Text style={{ fontSize: 12, color: '#475569', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Live Location:</Text> {parseFloat(lat).toFixed(4)}, {parseFloat(lng).toFixed(4)}</Text>
+                                    <Text style={{ fontSize: 12, color: '#475569', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Distance to Site:</Text> {distance}</Text>
+                                    <Text style={{ fontSize: 12, color: '#475569', marginBottom: 2 }}>
+                                      <Text style={{ fontWeight: '700' }}>Geofence Status:</Text>{' '}
+                                      <Text style={{ fontWeight: '800', color: geofence === 'outside_breach' ? Colors.danger : Colors.success }}>
+                                        {geofence === 'outside_breach' ? 'Outside Breach (Left Work Area)' : 'Inside Work Area'}
+                                      </Text>
+                                    </Text>
+                                    <Text style={{ fontSize: 12, color: '#475569', marginBottom: 2 }}><Text style={{ fontWeight: '700' }}>Time on Site:</Text> {timeOnSite}</Text>
+                                    <Text style={{ fontSize: 12, color: '#475569' }}><Text style={{ fontWeight: '700' }}>Active Status:</Text> {liveInfo.status || 'Active'}</Text>
+                                  </View>
+                                </View>
+                              );
+                            })}
                           </View>
-                          <TouchableOpacity
-                            style={styles.approveBtn}
-                            onPress={() => handleAddWorkerToRoster(w._id)}
-                          >
-                            <Text style={styles.approveBtnText}>Add Crew</Text>
-                          </TouchableOpacity>
-                        </View>
-                      ))}
+                        );
+                      })()}
                     </View>
-                  </View>
-                );
-              })()}
+                  )}
 
-              {/* Your Crew members Section */}
-              <Text style={styles.sectionTitle}>Your Crew Members</Text>
-              {rosterWorkers.length === 0 ? (
-                <View style={[styles.emptyCard, { marginBottom: 20 }]}>
-                  <Text style={styles.emptyIcon}>👥</Text>
-                  <Text style={styles.emptyText}>No crew members added yet.</Text>
-                  <TouchableOpacity
-                    style={styles.emptyLinkBtn}
-                    onPress={() => fadeTransition(() => navigateToTab('roster'))}
-                  >
-                    <Text style={styles.emptyLinkText}>Build Your Crew Roster Now ➔</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.crewGridContainer}>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ paddingBottom: 10 }}>
-                    {rosterWorkers.map((worker) => (
-                      <TouchableOpacity
-                        key={worker._id}
-                        style={styles.homeCrewCard}
-                        onPress={() => {
-                          setSelectedRosterWorker(worker);
-                          fetchWorkerProfileData(worker._id);
-                          fadeTransition(() => navigateToTab('roster'));
-                        }}
-                        activeOpacity={0.8}
-                      >
-                        <View style={styles.homeCrewAvatarContainer}>
-                          <Text style={styles.homeCrewAvatarIcon}>👤</Text>
-                          <View style={[
-                            styles.homeCrewStatusDot,
-                            {
-                              backgroundColor: ['available', 'active_shift'].includes(worker.status)
-                                ? '#10B981' // Green
-                                : ['busy', 'cleaning', 'on_job'].includes(worker.status)
-                                ? '#F59E0B' // Amber
-                                : '#64748B' // Grey
-                            }
-                          ]} />
+                  {/* 8. Project History */}
+                  <View style={{ marginBottom: 40 }}>
+                    <Text style={[styles.sectionTitle, { fontSize: 18, color: Colors.secondary, marginBottom: 12 }]}>📜 Project History Archive</Text>
+                    {(() => {
+                      const terminalContracts = contracts.filter(c => ['Handed Over', 'Completed', 'Cancelled'].includes(c.status));
+                      if (terminalContracts.length === 0) {
+                        return (
+                          <View style={{ backgroundColor: '#F1F5F9', padding: 16, borderRadius: 10, alignItems: 'center' }}>
+                            <Text style={{ color: '#64748B', fontSize: 14 }}>No archived projects in history.</Text>
+                          </View>
+                        );
+                      }
+                      return terminalContracts.map(project => (
+                        <View key={project._id} style={{ backgroundColor: '#F8FAFC', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 8 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: '#334155' }}>{project.category || 'Cleaning'} - {project.clientName}</Text>
+                            <Text style={{ fontSize: 11, fontWeight: '800', color: project.status === 'Cancelled' ? Colors.danger : Colors.success }}>{project.status.toUpperCase()}</Text>
+                          </View>
+                          <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Date: {new Date(project.schedule?.date).toLocaleDateString()} • Site: {project.location?.address?.split(',')[0]}</Text>
                         </View>
-                        <Text style={styles.homeCrewName} numberOfLines={1}>{worker.name}</Text>
-                        <Text style={styles.homeCrewId} numberOfLines={1}>
-                          {worker.workerIdNumber || `ID: ${worker._id.slice(-6)}`}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                      ));
+                    })()}
+                  </View>
                 </View>
               )}
-            </View>
-          )}
 
           {/* ──────────────────────────────────────────────────────────────────
               TAB 2: NEW CONTRACT (Package selection OR Page Forms)
@@ -2985,239 +3386,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
             </View>
           )}
 
-          {/* ──────────────────────────────────────────────────────────────────
-              TAB 3: REAL-TIME GPS (Live tracking monitor)
-              ────────────────────────────────────────────────────────────────── */}
-          {activeTab === 'gps' && (
-            <View>
-              <Text style={styles.sectionTitle}>Real-time GPS Dispatch Tracking</Text>
-              
-              {activeContracts.length === 0 ? (
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyIcon}>📡</Text>
-                  <Text style={styles.emptyText}>No active contracts found. Create a contract first.</Text>
-                  <TouchableOpacity
-                    style={styles.emptyLinkBtn}
-                    onPress={() => fadeTransition(() => { setSelectedPackage(null); navigateToTab('newContract'); })}
-                  >
-                    <Text style={styles.emptyLinkText}>Draft New Dispatch Now ➔</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View>
-                  {/* Active contracts selector */}
-                  <View style={styles.activeContractsSelectorBox}>
-                    <Text style={styles.stepperLabel}>Select Active Tracking Contract:</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
-                      {activeContracts.map((c) => (
-                        <TouchableOpacity
-                          key={c._id}
-                          style={[
-                            styles.activeContractTab,
-                            selectedContractForMap?._id === c._id && styles.activeContractTabSelected
-                          ]}
-                          onPress={() => {
-                            setSelectedContractForMap(c);
-                            setMockProgress(0); // Restart route tracking
-                          }}
-                        >
-                          <Text style={[
-                            styles.activeContractTabText,
-                            selectedContractForMap?._id === c._id && styles.activeContractTabTextSelected
-                          ]}>
-                            🏢 {c.clientName}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
 
-                  {selectedContractForMap && (
-                    <View style={styles.mapCard}>
-                      <View style={styles.mapContractHeader}>
-                        <View style={{ flex: 1 }}>
-                          <Text style={styles.mapClient}>{selectedContractForMap.clientName}</Text>
-                          <Text style={styles.mapAddress}>📍 Site: {selectedContractForMap.location?.address}</Text>
-                        </View>
-                        <View style={styles.liveIndicatorBadge}>
-                          <Text style={styles.liveIndicatorText}>● LIVE SIGNAL</Text>
-                        </View>
-                      </View>
-
-                      {/* SLA Warning banner */}
-                      {selectedContractForMap.isUrgent && (
-                        <View style={styles.slaBanner}>
-                          <Text style={styles.slaBannerText}>
-                            🚨 Urgent dispatch contract: 5-minute cleaner response window.
-                          </Text>
-                        </View>
-                      )}
-
-                      {/* Real-time Google Map styled radar fallback */}
-                      {selectedContractForMap.workers?.map((w) => {
-                        const isAccepted = selectedContractForMap.assignments?.some(
-                          a => a.workerId?._id === w._id && a.response === 'accepted'
-                        );
-                        if (!isAccepted) return null;
-
-                        const liveInfo = liveWorkers[w._id] || {};
-                        const lat = liveInfo.lat || selectedContractForMap.location?.coordinates?.lat || NY_LAT;
-                        const lng = liveInfo.lng || selectedContractForMap.location?.coordinates?.lng || NY_LNG;
-                        const geofence = liveInfo.status === 'Left Work Area' ? 'outside_breach' : 'inside';
-
-                        return (
-                          <View key={w._id} style={{ marginBottom: 16 }}>
-                            <Text style={styles.radarLabel}>🛰️ Dispatch Tracking Radar: {w.name}</Text>
-                            <MapViewContainer
-                              clientCoords={[selectedContractForMap.location?.coordinates?.lng || NY_LNG, selectedContractForMap.location?.coordinates?.lat || NY_LAT]}
-                              workerCoords={[lng, lat]}
-                              clientName={selectedContractForMap.clientName}
-                              workerName={w.name}
-                              geofenceRadius={50}
-                              geofenceStatus={geofence}
-                              height={230}
-                            />
-                          </View>
-                        );
-                      })}
-
-                      {/* Geofence Alerts warnings list */}
-                      {geofenceAlerts.length > 0 && (
-                        <View style={styles.alertsCard}>
-                          <Text style={styles.alertsTitle}>🚨 Recent Geofence Breach Events</Text>
-                          {geofenceAlerts.map((alert) => (
-                            <View key={alert.id} style={[
-                              styles.alertRow, 
-                              alert.type === 'breach' ? styles.alertRowBreach : styles.alertRowReturn
-                            ]}>
-                              <Text style={styles.alertRowText}>{alert.message}</Text>
-                              <Text style={styles.alertRowTime}>{new Date(alert.timestamp).toLocaleTimeString()}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      )}
-
-                      {/* Worker Live Tracking Stats Log Panel */}
-                      <View style={styles.trackingPanel}>
-                        <Text style={styles.trackingPanelTitle}>Active Crew Status & Attendance Verification Board:</Text>
-                        
-                        {selectedContractForMap.workers?.length === 0 ? (
-                          <Text style={styles.noWorkersText}>No workers associated with this contract.</Text>
-                        ) : (
-                          selectedContractForMap.workers?.map((w) => {
-                            const isAccepted = selectedContractForMap.assignments?.some(
-                              a => a.workerId?._id === w._id && a.response === 'accepted'
-                            );
-
-                            const liveInfo = liveWorkers[w._id] || {};
-                            
-                            const workedMins = liveInfo.workedMinutes || 0;
-                            const spentMins = Math.floor(workedMins);
-                            const spentHrs = Math.floor(spentMins / 60);
-                            const spentRemainingMins = spentMins % 60;
-
-                            const contractDuration = selectedContractForMap.schedule?.durationMinutes || 120;
-                            const remainingMins = Math.max(0, contractDuration - spentMins);
-                            const remainingHrs = Math.floor(remainingMins / 60);
-                            const remainingRemainingMins = remainingMins % 60;
-
-                            const completionPercentage = Math.min(100, Math.round((spentMins / contractDuration) * 100));
-
-                            const violationsCount = liveInfo.totalViolations || 0;
-                            const timeSpentOutside = Math.round(liveInfo.timeSpentOutsideMinutes || 0);
-
-                            // Attendance grade summary
-                            let grade = 'PENDING';
-                            if (liveInfo.checkInTime) {
-                              if (violationsCount === 0) grade = 'GOOD';
-                              else if (violationsCount <= 2) grade = 'MINOR ISSUES';
-                              else grade = 'ATTENDANCE WARNING';
-                            }
-                            if (liveInfo.status === 'Completed') {
-                              grade = 'COMPLETED';
-                            }
-
-                            if (!isAccepted) return null;
-
-                            return (
-                              <View key={w._id} style={styles.trackingWorkerCard}>
-                                <View style={styles.trackingWorkerHeader}>
-                                  <View>
-                                    <Text style={styles.trackingPanelName}>👤 {w.name}</Text>
-                                    <Text style={styles.trackingPanelMeta}>ID: {w.email}</Text>
-                                  </View>
-                                  <View style={[
-                                    styles.arrivalBadge,
-                                    liveInfo.status === 'Completed' ? styles.arrivalBadgeGreen : styles.arrivalBadgeBlue
-                                  ]}>
-                                    <Text style={styles.arrivalBadgeText}>
-                                      {(liveInfo.status || 'Traveling').toUpperCase()}
-                                    </Text>
-                                  </View>
-                                </View>
-
-                                {/* Work Duration System representation */}
-                                {liveInfo.checkInTime ? (
-                                  <View style={styles.durationAnalyticsBox}>
-                                    <View style={styles.durationRow}>
-                                      <Text style={styles.durationLabel}>Worked Duration:</Text>
-                                      <Text style={styles.durationValue}>{spentHrs}h {spentRemainingMins}m</Text>
-                                    </View>
-                                    <View style={styles.durationRow}>
-                                      <Text style={styles.durationLabel}>Remaining Duration:</Text>
-                                      <Text style={styles.durationValue}>{remainingHrs}h {remainingRemainingMins}m</Text>
-                                    </View>
-                                    
-                                    {/* Progress completion bar */}
-                                    <View style={styles.progressContainer}>
-                                      <View style={[styles.progressBar, { width: `${completionPercentage}%` }]} />
-                                      <Text style={styles.progressText}>{completionPercentage}% Completed</Text>
-                                    </View>
-                                  </View>
-                                ) : (
-                                  <View style={styles.notStartedBox}>
-                                    <Text style={styles.notStartedText}>⏳ Shift Check-In Pending (Worker traveling)</Text>
-                                  </View>
-                                )}
-
-                                {/* Attendance Verification System details */}
-                                <View style={styles.verificationSummaryGrid}>
-                                  <Text style={styles.verificationHeading}>Attendance Verification Score Card</Text>
-                                  <View style={styles.verificationRow}>
-                                    <Text style={styles.verificationLabel}>Total Geofence Violations:</Text>
-                                    <Text style={[
-                                      styles.verificationValue, 
-                                      violationsCount > 0 && { color: Colors.danger, fontWeight: '900' }
-                                    ]}>
-                                      {violationsCount} breaches
-                                    </Text>
-                                  </View>
-                                  <View style={styles.verificationRow}>
-                                    <Text style={styles.verificationLabel}>Time Spent Outside Work Area:</Text>
-                                    <Text style={styles.verificationValue}>{timeSpentOutside} mins</Text>
-                                  </View>
-                                  <View style={styles.verificationRow}>
-                                    <Text style={styles.verificationLabel}>GPS Attendance Summary:</Text>
-                                    <Text style={[
-                                      styles.verificationValue,
-                                      { fontWeight: '950' },
-                                      grade === 'GOOD' || grade === 'COMPLETED' ? { color: Colors.success } : { color: Colors.warning }
-                                    ]}>
-                                      {grade}
-                                    </Text>
-                                  </View>
-                                </View>
-                              </View>
-                            );
-                          })
-                        )}
-                      </View>
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
-          )}
 
               {activeTab === 'roster' && renderRosterTab()}
               {activeTab === 'clientRequests' && renderClientRequestsTab()}
@@ -3274,7 +3443,19 @@ const ContractorDashboard = ({ user, onLogout }) => {
             {activeTab === 'freelance' && <View style={styles.tabActiveIndicator} />}
           </TouchableOpacity>
 
-
+          <TouchableOpacity
+            style={styles.tabBarItem}
+            activeOpacity={0.8}
+            onPress={() => {
+              if (activeTab !== 'roster') {
+                fadeTransition(() => navigateToTab('roster'));
+              }
+            }}
+          >
+            <Text style={[styles.tabBarIcon, activeTab === 'roster' && styles.tabBarIconActive]}>👥</Text>
+            <Text style={[styles.tabBarLabel, activeTab === 'roster' && styles.tabBarLabelActive]}>Roster</Text>
+            {activeTab === 'roster' && <View style={styles.tabActiveIndicator} />}
+          </TouchableOpacity>
         </View>
       )}
       {renderPaymentModal()}
@@ -3375,6 +3556,78 @@ const ContractorDashboard = ({ user, onLogout }) => {
             <TouchableOpacity 
               style={styles.calendarCloseBtn}
               onPress={() => setShowCalendarModal(false)}
+            >
+              <Text style={styles.calendarCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Contractor Notifications Modal */}
+      <Modal
+        visible={showNotificationsModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowNotificationsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.calendarContainer}>
+            <View style={styles.calendarHeader}>
+              <Text style={styles.calendarMonthTitle}>🔔 Notifications</Text>
+              <TouchableOpacity 
+                onPress={() => setShowNotificationsModal(false)}
+                style={styles.calendarNavBtn}
+              >
+                <Text style={styles.calendarNavBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              style={{ maxHeight: 350, marginVertical: 10 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {loadingNotifications ? (
+                <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
+              ) : notifications.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: '#64748B', fontSize: 13, marginVertical: 20 }}>
+                  No notifications yet.
+                </Text>
+              ) : (
+                notifications.map(notif => (
+                  <TouchableOpacity
+                    key={notif._id}
+                    style={{
+                      padding: 12,
+                      backgroundColor: notif.read ? '#FFFFFF' : 'rgba(16, 185, 129, 0.05)',
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: notif.read ? '#E2E8F0' : 'rgba(16, 185, 129, 0.2)',
+                      marginBottom: 8
+                    }}
+                    onPress={() => handleNotificationClick(notif)}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <Text style={{ fontWeight: '800', color: Colors.secondary, fontSize: 13 }}>
+                        {notif.title}
+                      </Text>
+                      {!notif.read && (
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' }} />
+                      )}
+                    </View>
+                    <Text style={{ fontSize: 12, color: '#475569', marginBottom: 6 }}>
+                      {notif.message}
+                    </Text>
+                    <Text style={{ fontSize: 9.5, color: '#94A3B8', alignSelf: 'flex-end' }}>
+                      {new Date(notif.createdAt).toLocaleString()}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+
+            <TouchableOpacity 
+              style={styles.calendarCloseBtn}
+              onPress={() => setShowNotificationsModal(false)}
             >
               <Text style={styles.calendarCloseBtnText}>Close</Text>
             </TouchableOpacity>

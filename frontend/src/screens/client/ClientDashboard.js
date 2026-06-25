@@ -546,7 +546,7 @@ const ClientDashboard = ({ user, onLogout }) => {
                       {r.offers.length === 0 ? (
                         <Text style={styles.noOffersText}>No contractor offers submitted yet.</Text>
                       ) : (
-                        r.offers.map((offer) => (
+                        [...r.offers].sort((a, b) => a.price - b.price).map((offer) => (
                           <View key={offer._id} style={styles.offerRow}>
                             <View style={{ flex: 1 }}>
                               <Text style={styles.offerCompany}>{offer.contractor?.companyName || 'Freelance Contractor'}</Text>
