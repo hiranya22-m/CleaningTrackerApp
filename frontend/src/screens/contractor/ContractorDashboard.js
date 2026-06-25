@@ -3471,19 +3471,6 @@ const ContractorDashboard = ({ user, onLogout }) => {
             {activeTab === 'freelance' && <View style={styles.tabActiveIndicator} />}
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.tabBarItem}
-            activeOpacity={0.8}
-            onPress={() => {
-              if (activeTab !== 'roster') {
-                fadeTransition(() => navigateToTab('roster'));
-              }
-            }}
-          >
-            <Text style={[styles.tabBarIcon, activeTab === 'roster' && styles.tabBarIconActive]}>👥</Text>
-            <Text style={[styles.tabBarLabel, activeTab === 'roster' && styles.tabBarLabelActive]}>Roster</Text>
-            {activeTab === 'roster' && <View style={styles.tabActiveIndicator} />}
-          </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.tabBarItem}
