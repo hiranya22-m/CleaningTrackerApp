@@ -295,6 +295,13 @@ export const authAPI = {
     const res = await apiClient.get('/auth/profile');
     return res.data;
   },
+  updateProfile: async (profileData) => {
+    const res = await apiClient.put('/auth/profile', profileData);
+    if (res.data.success && res.data.user) {
+      await setCurrentUserStore(res.data.user);
+    }
+    return res.data;
+  },
   getWorkers: async () => {
     const res = await apiClient.get('/auth/workers');
     return res.data;

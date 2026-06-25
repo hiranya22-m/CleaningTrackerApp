@@ -14,7 +14,7 @@ import {
   Modal
 } from 'react-native';
 import { Colors } from '../../theme/colors';
-import { clientAPI } from '../../api/client';
+import { clientAPI, authAPI } from '../../api/client';
 import CustomInput from '../../components/CustomInput';
 import CustomButton from '../../components/CustomButton';
 import AppFooter from '../../components/AppFooter';
@@ -55,6 +55,25 @@ const ClientDashboard = ({ user, onLogout }) => {
   // Inbox states
   const [requests, setRequests] = useState([]);
   const [expandedRequestId, setExpandedRequestId] = useState(null);
+
+  // Profile states
+  const [profileUser, setProfileUser] = useState(user);
+  const [profileName, setProfileName] = useState(user?.name || '');
+  const [profilePhone, setProfilePhone] = useState(user?.phoneNumber || '');
+  const [profileState, setProfileState] = useState(user?.state || '');
+  const [updatingProfile, setUpdatingProfile] = useState(false);
+
+  useEffect(() => {
+    setProfileUser(user);
+  }, [user]);
+
+  useEffect(() => {
+    if (profileUser) {
+      setProfileName(profileUser.name || '');
+      setProfilePhone(profileUser.phoneNumber || '');
+      setProfileState(profileUser.state || '');
+    }
+  }, [profileUser]);
 
   // Calendar states
   const [showCalendarModal, setShowCalendarModal] = useState(false);
@@ -97,6 +116,85 @@ const ClientDashboard = ({ user, onLogout }) => {
   useEffect(() => {
     loadData();
   }, [activeTab]);
+
+  const handleUpdateProfile = async () => {
+    if (!profileName.trim()) {
+      Alert.alert('Error ⚠️', 'Name is required');
+      return;
+    }
+    if (!profilePhone.trim()) {
+      Alert.alert('Error ⚠️', 'Phone number is required');
+      return;
+    }
+    try {
+      setUpdatingProfile(true);
+      const res = await authAPI.updateProfile({
+        name: profileName,
+        phoneNumber: profilePhone,
+        state: profileState
+      });
+      if (res.success) {
+        Alert.alert('Success 🎉', 'Profile updated successfully');
+        if (res.user) {
+          setProfileUser(res.user);
+        }
+      } else {
+        Alert.alert('Error ⚠️', res.message || 'Failed to update profile');
+      }
+    } catch (error) {
+      Alert.alert('Error ⚠️', error.message || 'Failed to update profile');
+    } finally {
+      setUpdatingProfile(false);
+    }
+  };
+
+  const renderProfileTab = () => {
+    return (
+      <View style={{ paddingBottom: 30 }}>
+        <Text style={styles.sectionTitle}>My Profile 👤</Text>
+        <Text style={styles.sectionSubtitle}>Manage and update your client account details.</Text>
+        
+        <View style={[styles.formCard, { marginTop: 15 }]}>
+          <CustomInput
+            label="Full Name"
+            value={profileName}
+            onChangeText={setProfileName}
+            placeholder="John Doe"
+            icon="👤"
+            required
+          />
+
+          <CustomInput
+            label="Phone Number"
+            value={profilePhone}
+            onChangeText={setProfilePhone}
+            placeholder="77 123 4567"
+            icon="📞"
+            keyboardType="phone-pad"
+            required
+          />
+
+          <CustomInput
+            label="State / Region"
+            value={profileState}
+            onChangeText={setProfileState}
+            placeholder="New York"
+            icon="📍"
+          />
+
+          <View style={{ marginTop: 10 }}>
+            <CustomButton
+              title={updatingProfile ? "Saving Changes..." : "Save Changes"}
+              type="primary"
+              onPress={handleUpdateProfile}
+              disabled={updatingProfile}
+            />
+          </View>
+        </View>
+      </View>
+    );
+  };
+
 
   const scrollRef = useRef(null);
   useEffect(() => {
@@ -556,7 +654,7 @@ const ClientDashboard = ({ user, onLogout }) => {
                             {r.status === 'pending' ? (
                               <TouchableOpacity
                                 style={styles.acceptBtn}
-                                onPress={() => handleAcceptOffer(r._id, offer._id)}
+                                  onPress={() => handleAcceptOffer(r._id, offer._id)}
                               >
                                 <Text style={styles.acceptBtnText}>Accept</Text>
                               </TouchableOpacity>
@@ -579,6 +677,9 @@ const ClientDashboard = ({ user, onLogout }) => {
             )}
           </View>
         )}
+
+        {/* TAB 4: PROFILE */}
+        {activeTab === 'profile' && renderProfileTab()}
       </ScrollView>
 
       {/* Tabs Footer Navigation */}
@@ -614,6 +715,17 @@ const ClientDashboard = ({ user, onLogout }) => {
         >
           <Text style={[styles.tabIcon, activeTab === 'inbox' && styles.tabIconActive]}>📥</Text>
           <Text style={[styles.tabLabel, activeTab === 'inbox' && styles.tabLabelActive]}>Inbox</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'profile' && styles.tabItemActive]}
+          onPress={() => setActiveTab('profile')}
+          activeOpacity={0.7}
+          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          pointerEvents="auto"
+        >
+          <Text style={[styles.tabIcon, activeTab === 'profile' && styles.tabIconActive]}>👤</Text>
+          <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}>Profile</Text>
         </TouchableOpacity>
       </View>
 

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, RefreshControl, StyleSheet, Alert, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { Colors } from '../../theme/colors';
-import { jobsAPI, attendanceAPI, workerAPI, getBaseUrl } from '../../api/client';
+import { jobsAPI, attendanceAPI, workerAPI, getBaseUrl, authAPI } from '../../api/client';
 import AppFooter from '../../components/AppFooter';
+import CustomInput from '../../components/CustomInput';
+import CustomButton from '../../components/CustomButton';
 import io from 'socket.io-client';
 import backScrollEmitter from '../../utils/backScrollEmitter';
 
@@ -25,6 +27,25 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
   const [selectedContractor, setSelectedContractor] = useState(null);
   const [contractorProjects, setContractorProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
+
+  // Profile states
+  const [profileUser, setProfileUser] = useState(user);
+  const [profileName, setProfileName] = useState(user?.name || '');
+  const [profilePhone, setProfilePhone] = useState(user?.phoneNumber || '');
+  const [profileHourlyRate, setProfileHourlyRate] = useState(user?.hourlyRate !== undefined ? String(user.hourlyRate) : '');
+  const [updatingProfile, setUpdatingProfile] = useState(false);
+
+  useEffect(() => {
+    setProfileUser(user);
+  }, [user]);
+
+  useEffect(() => {
+    if (profileUser) {
+      setProfileName(profileUser.name || '');
+      setProfilePhone(profileUser.phoneNumber || '');
+      setProfileHourlyRate(profileUser.hourlyRate !== undefined ? String(profileUser.hourlyRate) : '');
+    }
+  }, [profileUser]);
 
   const loadData = async () => {
     try {
@@ -92,6 +113,105 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
       socket.disconnect();
     };
   }, []);
+
+  const handleUpdateProfile = async () => {
+    if (!profileName.trim()) {
+      Alert.alert('Error ⚠️', 'Name is required');
+      return;
+    }
+    if (!profilePhone.trim()) {
+      Alert.alert('Error ⚠️', 'Phone number is required');
+      return;
+    }
+    if (!profileHourlyRate.trim()) {
+      Alert.alert('Error ⚠️', 'Hourly rate is required');
+      return;
+    }
+    const parsedRate = parseFloat(profileHourlyRate);
+    if (isNaN(parsedRate) || parsedRate <= 0) {
+      Alert.alert('Error ⚠️', 'Please enter a valid positive hourly rate');
+      return;
+    }
+    
+    try {
+      setUpdatingProfile(true);
+      const res = await authAPI.updateProfile({
+        name: profileName,
+        phoneNumber: profilePhone,
+        hourlyRate: parsedRate
+      });
+      if (res.success) {
+        Alert.alert('Success 🎉', 'Profile updated successfully');
+        if (res.user) {
+          setProfileUser(res.user);
+        }
+      } else {
+        Alert.alert('Error ⚠️', res.message || 'Failed to update profile');
+      }
+    } catch (error) {
+      Alert.alert('Error ⚠️', error.message || 'Failed to update profile');
+    } finally {
+      setUpdatingProfile(false);
+    }
+  };
+
+  const renderProfileTab = () => {
+    return (
+      <View style={{ paddingBottom: 30 }}>
+        <Text style={styles.sectionTitle}>My Profile 👤</Text>
+        <Text style={styles.sectionSubtitle}>Manage and update your crew member details.</Text>
+        
+        <View style={[styles.formCard, { marginTop: 15 }]}>
+          <CustomInput
+            label="Full Name"
+            value={profileName}
+            onChangeText={setProfileName}
+            placeholder="John Doe"
+            icon="👤"
+            required
+          />
+
+          <CustomInput
+            label="Phone Number"
+            value={profilePhone}
+            onChangeText={setProfilePhone}
+            placeholder="77 123 4567"
+            icon="📞"
+            keyboardType="phone-pad"
+            required
+          />
+
+          <CustomInput
+            label="Hourly Rate ($/hr)"
+            value={profileHourlyRate}
+            onChangeText={setProfileHourlyRate}
+            placeholder="25.00"
+            icon="💵"
+            keyboardType="numeric"
+            required
+          />
+
+          {profileUser?.workerIdNumber ? (
+            <CustomInput
+              label="Worker ID (Read-only)"
+              value={profileUser.workerIdNumber}
+              editable={false}
+              icon="🆔"
+            />
+          ) : null}
+
+          <View style={{ marginTop: 10 }}>
+            <CustomButton
+              title={updatingProfile ? "Saving Changes..." : "Save Changes"}
+              type="primary"
+              onPress={handleUpdateProfile}
+              disabled={updatingProfile}
+            />
+          </View>
+        </View>
+      </View>
+    );
+  };
 
   const scrollRef = useRef(null);
   useEffect(() => {
@@ -674,6 +794,8 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
           </View>
         )}
 
+        {activeTab === 'profile' && renderProfileTab()}
+
         <AppFooter />
       </ScrollView>
 
@@ -739,6 +861,17 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
           <Text style={[styles.tabBarIcon, activeTab === 'history' && styles.tabBarIconActive]}>📊</Text>
           <Text style={[styles.tabBarLabel, activeTab === 'history' && styles.tabBarLabelActive]}>My Shifts</Text>
           {activeTab === 'history' && <View style={styles.tabActiveIndicator} />}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.tabBarItem}
+          activeOpacity={0.8}
+          hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
+          onPress={() => setActiveTab('profile')}
+        >
+          <Text style={[styles.tabBarIcon, activeTab === 'profile' && styles.tabBarIconActive]}>👤</Text>
+          <Text style={[styles.tabBarLabel, activeTab === 'profile' && styles.tabBarLabelActive]}>Profile</Text>
+          {activeTab === 'profile' && <View style={styles.tabActiveIndicator} />}
         </TouchableOpacity>
       </View>
     </View>
@@ -1449,6 +1582,18 @@ const styles = StyleSheet.create({
     color: '#475569',
     fontSize: 11.5,
     fontWeight: '800'
+  },
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    shadowColor: '#4F46E5',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    elevation: 3
   }
 });
 

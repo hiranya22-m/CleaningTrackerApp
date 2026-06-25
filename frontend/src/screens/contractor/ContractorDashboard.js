@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors } from '../../theme/colors';
-import { contractorAPI, getBaseUrl, gpsAPI } from '../../api/client';
+import { contractorAPI, getBaseUrl, gpsAPI, authAPI } from '../../api/client';
 import CustomInput from '../../components/CustomInput';
 import CustomButton from '../../components/CustomButton';
 import TimeInput from '../../components/TimeInput';
@@ -78,6 +78,14 @@ const getCurrentTime24 = () => {
 
 const ContractorDashboard = ({ user, onLogout }) => {
   const [profileUser, setProfileUser] = useState(user);
+  
+  // Profile editing states
+  const [profileName, setProfileName] = useState(user?.name || '');
+  const [profilePhone, setProfilePhone] = useState(user?.phoneNumber || '');
+  const [profileCompanyName, setProfileCompanyName] = useState(user?.companyName || '');
+  const [profileLocations, setProfileLocations] = useState(user?.locations?.join(', ') || '');
+  const [profileTags, setProfileTags] = useState(user?.tags?.join(', ') || '');
+  const [updatingProfile, setUpdatingProfile] = useState(false);
   const [subscription, setSubscription] = useState(null);
   const [activeTab, setActiveTab] = useState('projects'); // 'projects', 'newContract', 'gps'
 
@@ -373,6 +381,16 @@ const ContractorDashboard = ({ user, onLogout }) => {
   useEffect(() => {
     setProfileUser(user);
   }, [user]);
+
+  useEffect(() => {
+    if (profileUser) {
+      setProfileName(profileUser.name || '');
+      setProfilePhone(profileUser.phoneNumber || '');
+      setProfileCompanyName(profileUser.companyName || '');
+      setProfileLocations(profileUser.locations?.join(', ') || '');
+      setProfileTags(profileUser.tags?.join(', ') || '');
+    }
+  }, [profileUser]);
 
   const formatPlanRenewalText = (pkgName, price) => {
     if (subscription && subscription.packageName === pkgName && subscription.renewsOn) {
@@ -1527,6 +1545,103 @@ const ContractorDashboard = ({ user, onLogout }) => {
     } catch (e) {
       Alert.alert('Error', 'Server error approving worker');
     }
+  };
+
+  const handleUpdateProfile = async () => {
+    if (!profileName.trim()) {
+      Alert.alert('Error ⚠️', 'Name is required');
+      return;
+    }
+    if (!profilePhone.trim()) {
+      Alert.alert('Error ⚠️', 'Phone number is required');
+      return;
+    }
+    
+    try {
+      setUpdatingProfile(true);
+      const res = await authAPI.updateProfile({
+        name: profileName,
+        phoneNumber: profilePhone,
+        companyName: profileCompanyName,
+        locations: profileLocations,
+        tags: profileTags
+      });
+      if (res.success) {
+        Alert.alert('Success 🎉', 'Profile updated successfully');
+        if (res.user) {
+          setProfileUser(res.user);
+        }
+      } else {
+        Alert.alert('Error ⚠️', res.message || 'Failed to update profile');
+      }
+    } catch (error) {
+      Alert.alert('Error ⚠️', error.message || 'Failed to update profile');
+    } finally {
+      setUpdatingProfile(false);
+    }
+  };
+
+  const renderProfileTab = () => {
+    return (
+      <View style={{ paddingBottom: 30 }}>
+        <Text style={styles.sectionTitle}>My Profile 👤</Text>
+        <Text style={styles.sectionSubtitle}>Manage and update your contractor account details.</Text>
+        
+        <View style={[styles.formCard, { marginTop: 15 }]}>
+          <CustomInput
+            label="Full Name"
+            value={profileName}
+            onChangeText={setProfileName}
+            placeholder="John Doe"
+            icon="👤"
+            required
+          />
+
+          <CustomInput
+            label="Phone Number"
+            value={profilePhone}
+            onChangeText={setProfilePhone}
+            placeholder="77 123 4567"
+            icon="📞"
+            keyboardType="phone-pad"
+            required
+          />
+
+          <CustomInput
+            label="Company Name"
+            value={profileCompanyName}
+            onChangeText={setProfileCompanyName}
+            placeholder="Elite Cleaning Co."
+            icon="🏢"
+          />
+
+          <CustomInput
+            label="Work Locations (comma-separated)"
+            value={profileLocations}
+            onChangeText={setProfileLocations}
+            placeholder="New York, Brooklyn, Queens"
+            icon="📍"
+          />
+
+          <CustomInput
+            label="Tags / Specialties (comma-separated)"
+            value={profileTags}
+            onChangeText={setProfileTags}
+            placeholder="Deep Clean, Commercial, Carpet"
+            icon="🏷️"
+          />
+
+          <View style={{ marginTop: 10 }}>
+            <CustomButton
+              title={updatingProfile ? "Saving Changes..." : "Save Changes"}
+              type="primary"
+              onPress={handleUpdateProfile}
+              disabled={updatingProfile}
+            />
+          </View>
+        </View>
+      </View>
+    );
   };
 
   // Switch tab loader hook
@@ -3391,6 +3506,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
               {activeTab === 'roster' && renderRosterTab()}
               {activeTab === 'clientRequests' && renderClientRequestsTab()}
               {activeTab === 'freelance' && renderFreelanceTab()}
+              {activeTab === 'profile' && renderProfileTab()}
             </>
           )}
         </Animated.View>
@@ -3455,6 +3571,20 @@ const ContractorDashboard = ({ user, onLogout }) => {
             <Text style={[styles.tabBarIcon, activeTab === 'roster' && styles.tabBarIconActive]}>👥</Text>
             <Text style={[styles.tabBarLabel, activeTab === 'roster' && styles.tabBarLabelActive]}>Roster</Text>
             {activeTab === 'roster' && <View style={styles.tabActiveIndicator} />}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.tabBarItem}
+            activeOpacity={0.8}
+            onPress={() => {
+              if (activeTab !== 'profile') {
+                fadeTransition(() => navigateToTab('profile'));
+              }
+            }}
+          >
+            <Text style={[styles.tabBarIcon, activeTab === 'profile' && styles.tabBarIconActive]}>👤</Text>
+            <Text style={[styles.tabBarLabel, activeTab === 'profile' && styles.tabBarLabelActive]}>Profile</Text>
+            {activeTab === 'profile' && <View style={styles.tabActiveIndicator} />}
           </TouchableOpacity>
         </View>
       )}

@@ -92,3 +92,52 @@ exports.getWorkers = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+/**
+ * @desc    Update current user profile
+ * @route   PUT /api/auth/profile
+ * @access  Private
+ */
+exports.updateProfile = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const { name, phoneNumber, companyName, locations, tags, state, hourlyRate } = req.body;
+
+    if (name) user.name = name.trim();
+    if (phoneNumber) user.phoneNumber = phoneNumber.trim();
+
+    // Role-specific fields
+    if (user.role === 'contractor') {
+      if (companyName !== undefined) user.companyName = companyName.trim();
+      if (locations !== undefined) {
+        user.locations = Array.isArray(locations) ? locations : locations.split(',').map(s => s.trim()).filter(Boolean);
+      }
+      if (tags !== undefined) {
+        user.tags = Array.isArray(tags) ? tags : tags.split(',').map(s => s.trim()).filter(Boolean);
+      }
+    } else if (user.role === 'client') {
+      if (state !== undefined) user.state = state.trim();
+    } else if (user.role === 'worker') {
+      if (hourlyRate !== undefined && !isNaN(hourlyRate)) {
+        user.hourlyRate = parseFloat(hourlyRate);
+      }
+    }
+
+    await user.save();
+
+    // Re-fetch populated package details for contractors
+    const updatedUser = await User.findById(user._id).populate('packageId');
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: updatedUser
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { login, getProfile, getWorkers } = require('../controllers/authController');
+const { login, getProfile, getWorkers, updateProfile } = require('../controllers/authController');
 const { requestOtp, verifyOtp } = require('../controllers/otpController');
 const { protect, authorize } = require('../middleware/authMiddleware');
 const emailService = require('../services/emailService');
@@ -27,6 +27,7 @@ router.post('/contractor/verify-otp', verifyOtp);
 
 // ─── Protected Routes ────────────────────────────────────────────────────────
 router.get('/profile', protect, getProfile);
+router.put('/profile', protect, updateProfile);
 router.get('/workers', protect, authorize('admin', 'contractor'), getWorkers);
 
 module.exports = router;
