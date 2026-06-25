@@ -1399,6 +1399,15 @@ const ContractorDashboard = ({ user, onLogout }) => {
           />
 
           <View style={{ marginTop: 15 }}>
+            <CustomButton
+              title={updatingProfile ? "Saving Changes..." : "Save Changes"}
+              type="primary"
+              onPress={handleUpdateProfile}
+              disabled={updatingProfile}
+            />
+          </View>
+
+          <View style={{ marginTop: 15 }}>
             <TouchableOpacity 
               style={{
                 backgroundColor: '#FCA5A5',
@@ -1414,15 +1423,6 @@ const ContractorDashboard = ({ user, onLogout }) => {
             >
               <Text style={{ color: '#7F1D1D', fontWeight: '800', fontSize: 14 }}>Logout ➔</Text>
             </TouchableOpacity>
-          </View>
-
-          <View style={{ marginTop: 15 }}>
-            <CustomButton
-              title={updatingProfile ? "Saving Changes..." : "Save Changes"}
-              type="primary"
-              onPress={handleUpdateProfile}
-              disabled={updatingProfile}
-            />
           </View>
         </View>
       </View>
