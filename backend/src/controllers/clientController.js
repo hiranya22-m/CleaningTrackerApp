@@ -136,6 +136,7 @@ exports.acceptOffer = async (req, res) => {
         durationMinutes: request.duration || 120
       },
       notes: `Accepted Client Request: ${request.description}`,
+      bidPrice: offer.price,
       status: 'active'
     });
 

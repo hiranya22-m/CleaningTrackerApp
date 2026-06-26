@@ -26,6 +26,7 @@ const ContractSchema = new mongoose.Schema({
   },
   notes: { type: String },
   pricePerHour: { type: Number, default: 25 },
+  bidPrice: { type: Number },
   createdAt: { type: Date, default: Date.now },
 });
 

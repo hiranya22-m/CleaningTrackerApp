@@ -2137,6 +2137,11 @@ const ContractorDashboard = ({ user, onLogout }) => {
                         <Text style={styles.acceptedBidTitle}>👤 Client: {c.clientName}</Text>
                         <Text style={styles.acceptedBidSub}>📅 Date: {new Date(c.schedule?.date).toLocaleDateString()} at {c.schedule?.startTime} ({c.schedule?.durationMinutes} mins)</Text>
                         <Text style={styles.acceptedBidLoc}>📍 Site: {c.location?.address}</Text>
+                        {c.bidPrice !== undefined && c.bidPrice !== null && (
+                          <Text style={[styles.acceptedBidLoc, { fontWeight: '700', color: '#10B981', marginTop: 2 }]}>
+                            💵 Bid Price: ${c.bidPrice}
+                          </Text>
+                        )}
                       </View>
                       <View style={[styles.assignCountBadge, assignedCount > 0 ? styles.assignCountActive : styles.assignCountPending]}>
                         <Text style={styles.assignCountText}>
@@ -2169,51 +2174,55 @@ const ContractorDashboard = ({ user, onLogout }) => {
                         )}
 
                         {/* Crew Selector Checklist */}
-                        <Text style={styles.selectCrewHeader}>Select crew member(s) to assign:</Text>
-                        {rosterWorkers.length === 0 ? (
-                          <Text style={styles.noWorkersText}>No crew members found on your roster. Please add workers first.</Text>
-                        ) : (
-                          <View style={styles.crewChecklist}>
-                            {rosterWorkers.map(worker => {
-                              const isAssigned = c.workers?.some(w => (w._id || w).toString() === worker._id.toString());
-                              const isChecked = (selectedWorkersForContract[c._id] || []).includes(worker._id);
+                        {assignedCount === 0 && (
+                          <>
+                            <Text style={styles.selectCrewHeader}>Select crew member(s) to assign:</Text>
+                            {rosterWorkers.length === 0 ? (
+                              <Text style={styles.noWorkersText}>No crew members found on your roster. Please add workers first.</Text>
+                            ) : (
+                              <View style={styles.crewChecklist}>
+                                {rosterWorkers.map(worker => {
+                                  const isAssigned = c.workers?.some(w => (w._id || w).toString() === worker._id.toString());
+                                  const isChecked = (selectedWorkersForContract[c._id] || []).includes(worker._id);
 
-                              return (
+                                  return (
+                                    <TouchableOpacity
+                                      key={worker._id}
+                                      style={[
+                                        styles.checklistRow,
+                                        isAssigned && styles.checklistRowDisabled
+                                      ]}
+                                      disabled={isAssigned}
+                                      onPress={() => toggleWorkerForContract(c._id, worker._id)}
+                                      activeOpacity={0.7}
+                                    >
+                                      <View style={styles.checkboxContainer}>
+                                        <Text style={styles.checkboxIcon}>
+                                          {isAssigned ? '✓' : isChecked ? '☑️' : '⬜'}
+                                        </Text>
+                                      </View>
+                                      <View style={{ flex: 1 }}>
+                                        <Text style={[styles.checklistWorkerName, isAssigned && styles.checklistTextDisabled]}>
+                                          {worker.name} {isAssigned && '(Already Assigned)'}
+                                        </Text>
+                                        <Text style={styles.checklistWorkerStatus}>
+                                          Status: {worker.status || 'available'}
+                                        </Text>
+                                      </View>
+                                    </TouchableOpacity>
+                                  );
+                                })}
+                                
                                 <TouchableOpacity
-                                  key={worker._id}
-                                  style={[
-                                    styles.checklistRow,
-                                    isAssigned && styles.checklistRowDisabled
-                                  ]}
-                                  disabled={isAssigned}
-                                  onPress={() => toggleWorkerForContract(c._id, worker._id)}
-                                  activeOpacity={0.7}
+                                  style={styles.confirmAssignBtn}
+                                  onPress={() => handleAssignCrewForContract(c)}
+                                  activeOpacity={0.8}
                                 >
-                                  <View style={styles.checkboxContainer}>
-                                    <Text style={styles.checkboxIcon}>
-                                      {isAssigned ? '✓' : isChecked ? '☑️' : '⬜'}
-                                    </Text>
-                                  </View>
-                                  <View style={{ flex: 1 }}>
-                                    <Text style={[styles.checklistWorkerName, isAssigned && styles.checklistTextDisabled]}>
-                                      {worker.name} {isAssigned && '(Already Assigned)'}
-                                    </Text>
-                                    <Text style={styles.checklistWorkerStatus}>
-                                      Status: {worker.status || 'available'}
-                                    </Text>
-                                  </View>
+                                  <Text style={styles.confirmAssignBtnText}>Assign Selected Crew</Text>
                                 </TouchableOpacity>
-                              );
-                            })}
-                            
-                            <TouchableOpacity
-                              style={styles.confirmAssignBtn}
-                              onPress={() => handleAssignCrewForContract(c)}
-                              activeOpacity={0.8}
-                            >
-                              <Text style={styles.confirmAssignBtnText}>Assign Selected Crew</Text>
-                            </TouchableOpacity>
-                          </View>
+                              </View>
+                            )}
+                          </>
                         )}
                       </View>
                     )}
