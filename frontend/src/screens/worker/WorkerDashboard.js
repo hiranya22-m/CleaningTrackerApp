@@ -9,7 +9,23 @@ import io from 'socket.io-client';
 import backScrollEmitter from '../../utils/backScrollEmitter';
 
 const WorkerDashboard = ({ user, onLogout, navigation }) => {
-  const [activeTab, setActiveTab] = useState('jobs'); // 'jobs', 'offers', 'history'
+  const [activeTab, setActiveTab] = useState('home'); // 'home', 'freelance', 'profile'
+  const [paysheetPeriod, setPaysheetPeriod] = useState('month'); // default to 'month'
+  const [showPaysheetPeriodDropdown, setShowPaysheetPeriodDropdown] = useState(false);
+  
+  const filterJobsByPeriod = (jobsList, period) => {
+    const now = new Date();
+    let limitDate = new Date(0);
+    if (period === 'week') {
+      limitDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    } else if (period === 'month') {
+      limitDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    } else if (period === '3months') {
+      limitDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    }
+    return jobsList.filter(j => new Date(j.startTime) >= limitDate);
+  };
+
   const [jobs, setJobs] = useState([]);
   const [attendance, setAttendance] = useState(null);
   const [attendanceRecords, setAttendanceRecords] = useState([]); // All shift records
@@ -81,6 +97,13 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
       } else {
         setAttendance(null);
       }
+
+      // 4. Fetch associated contractors
+      const contractorsRes = await workerAPI.getContractors();
+      if (contractorsRes.success) {
+        setContractors(contractorsRes.contractors);
+      }
+
       await fetchNotifications();
     } catch (error) {
       console.error('Error loading worker dashboard:', error.message);
@@ -107,7 +130,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
         `Contract request from ${data.clientName} at ${data.address}. Respond within ${mins} minutes.`,
         [
           { text: 'View Requests', onPress: () => {
-            setActiveTab('offers');
+            setActiveTab('home');
             loadData();
           }}
         ]
@@ -152,7 +175,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
       setUnreadNotificationsCount(prev => Math.max(0, prev - 1));
       setShowNotificationsModal(false);
       if (notif.type === 'contract_request') {
-        setActiveTab('offers');
+        setActiveTab('home');
       }
     } catch (e) {
       console.warn('Failed to handle notification click:', e.message);
@@ -295,7 +318,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
     await loadData();
     if (activeTab === 'freelance') {
       await fetchFreelanceJobs();
-    } else if (activeTab === 'contractors') {
+    } else if (activeTab === 'home') {
       if (selectedContractor) {
         await fetchContractorProjects(selectedContractor._id);
       } else {
@@ -414,7 +437,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
   useEffect(() => {
     if (activeTab === 'freelance') {
       fetchFreelanceJobs();
-    } else if (activeTab === 'contractors') {
+    } else if (activeTab === 'home') {
       fetchContractors();
       setSelectedContractor(null);
     }
@@ -522,214 +545,300 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
           </View>
         </View>
 
-        {activeTab === 'jobs' && (
+        {activeTab === 'home' && (
           <View>
-            {/* Shift Control Box */}
-            <View style={[styles.shiftCard, { borderColor: attendance ? '#A7F3D0' : '#FECACA' }]}>
-              <View style={styles.shiftText}>
-                <View style={styles.statusDotRow}>
-                  <View style={[styles.beaconDot, { backgroundColor: attendance ? Colors.success : Colors.danger }]} />
-                  <Text style={styles.shiftLabel}>
-                    Shift Status: {attendance ? 'ONLINE & ACTIVE' : 'OFFLINE'}
-                  </Text>
+            {selectedContractor ? (
+              <View style={styles.scheduleCard}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.sectionTitle}>🏢 {selectedContractor.companyName || selectedContractor.name}</Text>
+                    <Text style={styles.sectionSubtitle}>👤 Contact: {selectedContractor.name}</Text>
+                    <Text style={styles.sectionSubtitle}>✉️ {selectedContractor.email}  |  📞 {selectedContractor.phoneNumber}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.backBtn}
+                    onPress={() => {
+                      setSelectedContractor(null);
+                    }}
+                  >
+                    <Text style={styles.backBtnText}>← Back</Text>
+                  </TouchableOpacity>
                 </View>
-                <Text style={styles.shiftSub}>
-                  {attendance ? 'Your real-time GPS coordinates are logging.' : 'Clock in to start receiving jobs.'}
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.shiftBtn, 
-                  { 
-                    backgroundColor: attendance ? 'rgba(239, 68, 68, 0.08)' : Colors.primary,
-                    borderColor: attendance ? 'rgba(239, 68, 68, 0.2)' : Colors.primary
-                  }
-                ]}
-                onPress={handleClockInOut}
-                activeOpacity={0.8}
-                disabled={loadingShift}
-              >
-                <Text style={{ color: attendance ? Colors.danger : Colors.white, fontSize: 11, fontWeight: '900' }}>
-                  {loadingShift ? '...' : attendance ? 'Clock Out' : 'Clock In'}
-                </Text>
-              </TouchableOpacity>
-            </View>
 
-            {/* Today's Cleaning Jobs */}
-            <View style={styles.scheduleCard}>
-              <Text style={styles.sectionTitle}>📅 Today's Assigned Cleaning Jobs</Text>
-              
-              {jobs.length === 0 ? (
-                <View style={styles.emptyContainer}>
-                  <Text style={styles.emptyEmoji}>🎉</Text>
-                  <Text style={styles.emptyText}>No assigned jobs found today</Text>
-                  <Text style={styles.emptySub}>Check pending requests or Clock In to wait for dispatchers.</Text>
+                {/* 1. Projects requests to approve */}
+                <View style={{ marginBottom: 20 }}>
+                  <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>📥 Project Requests to Approve ({
+                    assignments.filter(a => a.response === 'pending' && a.contractId && a.contractId.contractorId && (a.contractId.contractorId._id || a.contractId.contractorId).toString() === selectedContractor._id.toString()).length
+                  })</Text>
+                  {(() => {
+                    const pendingRequests = assignments.filter(a => a.response === 'pending' && a.contractId && a.contractId.contractorId && (a.contractId.contractorId._id || a.contractId.contractorId).toString() === selectedContractor._id.toString());
+                    if (pendingRequests.length === 0) {
+                      return <Text style={{ color: '#64748B', fontSize: 12, paddingLeft: 8 }}>No pending requests from this contractor.</Text>;
+                    }
+                    return pendingRequests.map(assign => {
+                      const contract = assign.contractId;
+                      const remaining = getRemainingTimeText(assign.responseDeadline);
+                      const isExpired = remaining === 'Expired';
+                      if (isExpired) return null;
+                      return (
+                        <View key={assign._id} style={[styles.requestItem, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', padding: 12, borderRadius: 12, marginBottom: 8 }]}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <Text style={{ fontWeight: '800', color: Colors.secondary, fontSize: 13 }}>{contract?.clientName || 'Private Customer'}</Text>
+                            <Text style={{ fontSize: 11, color: '#EF4444', fontWeight: '700' }}>🕒 {remaining}</Text>
+                          </View>
+                          <Text style={{ fontSize: 12, color: '#475569' }}>📍 {contract?.location?.address}</Text>
+                          <Text style={{ fontSize: 12, color: '#475569' }}>📅 {contract?.schedule?.date ? new Date(contract.schedule.date).toLocaleDateString() : ''} at {contract?.schedule?.startTime} ({contract?.schedule?.durationMinutes} mins)</Text>
+                          {contract?.notes ? (
+                            <Text style={{ fontSize: 11, color: '#64748B', fontStyle: 'italic', marginTop: 4 }}>Notes: {contract.notes}</Text>
+                          ) : null}
+                          <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+                            <TouchableOpacity
+                              style={{ backgroundColor: '#10B981', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, flex: 1, alignItems: 'center' }}
+                              onPress={() => handleRespondAssignment(assign._id, 'accepted')}
+                            >
+                              <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>Accept ✓</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={{ backgroundColor: '#EF4444', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, flex: 1, alignItems: 'center' }}
+                              onPress={() => handleRespondAssignment(assign._id, 'rejected')}
+                            >
+                              <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '700' }}>Reject ✕</Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    });
+                  })()}
                 </View>
-              ) : (
-                jobs.map(job => {
-                  const status = getStatusConfig(job.status);
-                  return (
-                    <View key={job._id} style={styles.jobItemRow}>
-                      <View style={styles.jobItemHeader}>
-                        <View style={styles.addressCol}>
-                          <Text style={styles.addressText} numberOfLines={1}>📍 {job.address}</Text>
-                          <Text style={styles.timeRangeText}>
-                            ⏰ {formatJobTimeRange(job.startTime, job.expectedHours)}
-                          </Text>
-                        </View>
-                        <View style={[styles.statusBadge, { backgroundColor: status.bgColor }]}>
-                          <Text style={[styles.statusBadgeText, { color: status.color }]}>{status.label}</Text>
-                        </View>
-                      </View>
 
-                      {job.status === 'pending' && (
-                        <TouchableOpacity
-                          style={styles.startBtn}
-                          activeOpacity={0.8}
-                          onPress={() => {
-                            if (!attendance) {
-                              Alert.alert('Clock In Required', 'Please Clock In to start your cleaning shift.');
-                              return;
-                            }
-                            navigation.navigate('ActiveJob', { job });
-                          }}
-                        >
-                          <Text style={styles.startBtnText}>Start Job</Text>
-                        </TouchableOpacity>
-                      )}
+                <View style={styles.divider} />
 
-                      {job.status === 'started' && (
-                        <TouchableOpacity
-                          style={styles.completeBtn}
-                          activeOpacity={0.85}
-                          onPress={() => navigation.navigate('ActiveJob', { job })}
-                        >
-                          <Text style={styles.completeBtnText}>Complete Job</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  );
-                })
-              )}
-            </View>
-          </View>
-        )}
-
-        {activeTab === 'offers' && (
-          <View style={styles.requestsCard}>
-            <Text style={styles.sectionTitle}>📥 Pending Contract Requests ({assignments.length})</Text>
-            {assignments.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyEmoji}>📭</Text>
-                <Text style={styles.emptyText}>No pending requests</Text>
-                <Text style={styles.emptySub}>You will see active job requests dispatched by contractors here in real-time.</Text>
-              </View>
-            ) : (
-              assignments.map((assign) => {
-                const contract = assign.contractId;
-                const remaining = getRemainingTimeText(assign.responseDeadline);
-                const isExpired = remaining === 'Expired';
-                
-                if (isExpired) return null; // Exclude expired dynamically
-
-                return (
-                  <View key={assign._id} style={styles.requestItem}>
-                    <View style={styles.requestHeader}>
-                      <View style={{flex: 1}}>
-                        <View style={{flexDirection: 'row', alignItems: 'center'}}>
-                          <Text style={styles.requestClient}>{contract?.clientName || 'Private Customer'}</Text>
-                          {contract?.isUrgent && (
-                            <View style={styles.urgentBadge}>
-                              <Text style={styles.urgentBadgeText}>🚨 URGENT</Text>
+                {/* 2. Ongoing projects */}
+                <View style={{ marginBottom: 20 }}>
+                  <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>⏰ Ongoing Projects ({
+                    jobs.filter(j => j.contractor && (j.contractor._id || j.contractor).toString() === selectedContractor._id.toString() && j.status !== 'completed').length
+                  })</Text>
+                  {(() => {
+                    const ongoingJobs = jobs.filter(j => j.contractor && (j.contractor._id || j.contractor).toString() === selectedContractor._id.toString() && j.status !== 'completed');
+                    if (ongoingJobs.length === 0) {
+                      return <Text style={{ color: '#64748B', fontSize: 12, paddingLeft: 8 }}>No ongoing projects today.</Text>;
+                    }
+                    return ongoingJobs.map(job => {
+                      const status = getStatusConfig(job.status);
+                      return (
+                        <View key={job._id} style={styles.jobItemRow}>
+                          <View style={styles.jobItemHeader}>
+                            <View style={styles.addressCol}>
+                              <Text style={styles.addressText} numberOfLines={1}>📍 {job.address}</Text>
+                              <Text style={styles.timeRangeText}>
+                                ⏰ {formatJobTimeRange(job.startTime, job.expectedHours)}
+                              </Text>
                             </View>
+                            <View style={[styles.statusBadge, { backgroundColor: status.bgColor }]}>
+                              <Text style={[styles.statusBadgeText, { color: status.color }]}>{status.label}</Text>
+                            </View>
+                          </View>
+                          {job.status === 'pending' && (
+                            <TouchableOpacity
+                              style={styles.startBtn}
+                              activeOpacity={0.8}
+                              onPress={() => {
+                                if (!attendance) {
+                                  Alert.alert('Clock In Required', 'Please Clock In to start your cleaning shift.');
+                                  return;
+                                }
+                                navigation.navigate('ActiveJob', { job });
+                              }}
+                            >
+                              <Text style={styles.startBtnText}>Start Job</Text>
+                            </TouchableOpacity>
+                          )}
+                          {job.status === 'started' && (
+                            <TouchableOpacity
+                              style={styles.completeBtn}
+                              activeOpacity={0.85}
+                              onPress={() => navigation.navigate('ActiveJob', { job })}
+                            >
+                              <Text style={styles.completeBtnText}>Complete Job</Text>
+                            </TouchableOpacity>
                           )}
                         </View>
-                        <Text style={styles.requestAddress}>📍 {contract?.location?.address}</Text>
+                      );
+                    });
+                  })()}
+                </View>
+
+                <View style={styles.divider} />
+
+                {/* 3. Projects covered & Automated Paysheet */}
+                <View style={{ zIndex: 10 }}>
+                  <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 4 }]}>📊 Automated Paysheet</Text>
+                  <Text style={styles.automatedLabel}>⚠️ Payouts are computed automatically based on verified clock-in durations and GPS logs.</Text>
+                  
+                  {/* Period Dropdown */}
+                  <View style={{ marginBottom: 14, position: 'relative', zIndex: 20 }}>
+                    <TouchableOpacity
+                      style={styles.periodSelectBox}
+                      onPress={() => setShowPaysheetPeriodDropdown(!showPaysheetPeriodDropdown)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.periodSelectText}>
+                        Period: {paysheetPeriod === 'week' ? 'Week' : paysheetPeriod === 'month' ? 'Month' : '3 Months'}
+                      </Text>
+                      <Text style={styles.dropdownArrowIcon}>{showPaysheetPeriodDropdown ? '▲' : '▼'}</Text>
+                    </TouchableOpacity>
+
+                    {showPaysheetPeriodDropdown && (
+                      <View style={styles.periodDropdownMenu}>
+                        {[
+                          { id: 'week', label: 'Week' },
+                          { id: 'month', label: 'Month' },
+                          { id: '3months', label: '3 Months' }
+                        ].map((option) => (
+                          <TouchableOpacity
+                            key={option.id}
+                            style={styles.periodDropdownItem}
+                            onPress={() => {
+                              setPaysheetPeriod(option.id);
+                              setShowPaysheetPeriodDropdown(false);
+                            }}
+                          >
+                            <Text style={styles.periodDropdownItemText}>{option.label}</Text>
+                          </TouchableOpacity>
+                        ))}
                       </View>
-                      <View style={styles.timerBadge}>
-                        <Text style={styles.timerBadgeText}>🕒 {remaining}</Text>
-                      </View>
-                    </View>
-
-                    <Text style={styles.requestDetail}>Date: <Text style={{fontWeight: '700'}}>{contract ? new Date(contract.schedule.date).toLocaleDateString() : ''}</Text></Text>
-                    <Text style={styles.requestDetail}>Start Time: <Text style={{fontWeight: '700'}}>{contract?.schedule?.startTime}</Text></Text>
-                    <Text style={styles.requestDetail}>Duration: <Text style={{fontWeight: '700'}}>{contract?.schedule?.durationMinutes} mins</Text></Text>
-
-                    {contract?.notes ? (
-                      <Text style={styles.requestNotes}>📝 Notes: {contract.notes}</Text>
-                    ) : null}
-
-                    <View style={styles.requestActionsRow}>
-                      <TouchableOpacity
-                        style={[styles.actionButton, styles.acceptButton]}
-                        onPress={() => handleRespondAssignment(assign._id, 'accepted')}
-                      >
-                        <Text style={styles.actionButtonText}>Accept ✅</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.actionButton, styles.rejectButton]}
-                        onPress={() => handleRespondAssignment(assign._id, 'rejected')}
-                      >
-                        <Text style={styles.actionButtonText}>Reject ❌</Text>
-                      </TouchableOpacity>
-                    </View>
+                    )}
                   </View>
-                );
-              })
-            )}
-          </View>
-        )}
 
-        {activeTab === 'history' && (
-          <View style={styles.historySection}>
-            <Text style={styles.sectionTitle}>📊 Crew Attendance & Shift Logs</Text>
-            
-            <View style={styles.statsSummaryCard}>
-              <View style={styles.statsSummaryCol}>
-                <Text style={styles.statsSummaryVal}>{jobs.filter(j => j.status === 'completed').length}</Text>
-                <Text style={styles.statsSummaryLabel}>Completed Jobs</Text>
-              </View>
-              <View style={styles.statsSummaryCol}>
-                <Text style={styles.statsSummaryVal}>{attendanceRecords.length}</Text>
-                <Text style={styles.statsSummaryLabel}>Total Shifts</Text>
-              </View>
-            </View>
+                  {loadingProjects ? (
+                    <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 14 }} />
+                  ) : (
+                    <View>
+                      {/* Completed Jobs Table Header */}
+                      <View style={styles.tableHeaderRow}>
+                        <Text style={[styles.tableHeaderCell, { width: '25%' }]}>Client</Text>
+                        <Text style={[styles.tableHeaderCell, { width: '25%' }]}>Location</Text>
+                        <Text style={[styles.tableHeaderCell, { width: '20%' }]}>Date</Text>
+                        <Text style={[styles.tableHeaderCell, { width: '15%', textAlign: 'center' }]}>Hours</Text>
+                        <Text style={[styles.tableHeaderCell, { width: '15%', textAlign: 'right' }]}>Payout</Text>
+                      </View>
 
-            {attendanceRecords.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyEmoji}>📁</Text>
-                <Text style={styles.emptyText}>No shift logs recorded</Text>
-                <Text style={styles.emptySub}>Your clock-in/out history will appear here once you complete a shift.</Text>
+                      {(() => {
+                        const completedJobs = contractorProjects.filter(j => j.status === 'completed');
+                        const filteredCompletedJobs = filterJobsByPeriod(completedJobs, paysheetPeriod);
+                        const rate = parseFloat(profileHourlyRate || user.hourlyRate || '25');
+
+                        if (filteredCompletedJobs.length === 0) {
+                          return <Text style={styles.emptyTableText}>No completed projects covered in this period.</Text>;
+                        }
+
+                        const totalPayout = filteredCompletedJobs.reduce((sum, j) => {
+                          const hours = j.totalHoursWorked || 0;
+                          return sum + parseFloat((hours * rate).toFixed(2));
+                        }, 0);
+
+                        return (
+                          <View>
+                            {filteredCompletedJobs.map(job => {
+                              const hours = job.totalHoursWorked || 0;
+                              const payout = parseFloat((hours * rate).toFixed(2));
+                              return (
+                                <View key={job._id} style={styles.tableBodyRow}>
+                                  <Text style={[styles.tableBodyCell, { width: '25%' }]} numberOfLines={1}>{job.customerName}</Text>
+                                  <Text style={[styles.tableBodyCell, { width: '25%' }]} numberOfLines={1}>{job.address}</Text>
+                                  <Text style={[styles.tableBodyCell, { width: '20%' }]} numberOfLines={1}>
+                                    {new Date(job.startTime).toLocaleDateString(undefined, {month: 'numeric', day: 'numeric'})}
+                                  </Text>
+                                  <Text style={[styles.tableBodyCell, { width: '15%', textAlign: 'center' }]}>{hours}h</Text>
+                                  <Text style={[styles.tableBodyCell, { width: '15%', textAlign: 'right', fontWeight: '800', color: '#059669' }]}>
+                                    ${payout}
+                                  </Text>
+                                </View>
+                              );
+                            })}
+
+                            {/* Total Payout display card */}
+                            <View style={styles.totalSummaryBox}>
+                              <Text style={styles.totalSummaryLabel}>Total Amount Earned:</Text>
+                              <Text style={styles.totalSummaryValue}>${totalPayout.toFixed(2)}</Text>
+                            </View>
+                          </View>
+                        );
+                      })()}
+                    </View>
+                  )}
+                </View>
               </View>
             ) : (
-              attendanceRecords.map((record) => (
-                <View key={record._id} style={styles.historyCard}>
-                  <View style={styles.historyCardHeader}>
-                    <Text style={styles.historyCardDate}>
-                      📅 {new Date(record.clockIn).toLocaleDateString()}
-                    </Text>
-                    <View style={[styles.statusBadge, { backgroundColor: record.status === 'active' ? '#D1FAE5' : '#E2E8F0' }]}>
-                      <Text style={[styles.statusBadgeText, { color: record.status === 'active' ? '#10B981' : '#64748B' }]}>
-                        {record.status === 'active' ? 'ACTIVE NOW' : 'COMPLETED'}
+              // Main Home View
+              <View>
+                {/* Shift Control Box */}
+                <View style={[styles.shiftCard, { borderColor: attendance ? '#A7F3D0' : '#FECACA', marginBottom: 16 }]}>
+                  <View style={styles.shiftText}>
+                    <View style={styles.statusDotRow}>
+                      <View style={[styles.beaconDot, { backgroundColor: attendance ? Colors.success : Colors.danger }]} />
+                      <Text style={styles.shiftLabel}>
+                        Shift Status: {attendance ? 'ONLINE & ACTIVE' : 'OFFLINE'}
                       </Text>
                     </View>
+                    <Text style={styles.shiftSub}>
+                      {attendance ? 'Your real-time GPS coordinates are logging.' : 'Clock in to start receiving jobs.'}
+                    </Text>
                   </View>
-                  <View style={styles.historyDivider} />
-                  <Text style={styles.historyTimeLabel}>
-                    Clock In: <Text style={{fontWeight: '700'}}>{new Date(record.clockIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-                  </Text>
-                  {record.clockOut && (
-                    <Text style={styles.historyTimeLabel}>
-                      Clock Out: <Text style={{fontWeight: '700'}}>{new Date(record.clockOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.shiftBtn, 
+                      { 
+                        backgroundColor: attendance ? 'rgba(239, 68, 68, 0.08)' : Colors.primary,
+                        borderColor: attendance ? 'rgba(239, 68, 68, 0.2)' : Colors.primary
+                      }
+                    ]}
+                    onPress={handleClockInOut}
+                    activeOpacity={0.8}
+                    disabled={loadingShift}
+                  >
+                    <Text style={{ color: attendance ? Colors.danger : Colors.white, fontSize: 11, fontWeight: '900' }}>
+                      {loadingShift ? '...' : attendance ? 'Clock Out' : 'Clock In'}
                     </Text>
-                  )}
-                  {record.totalHours ? (
-                    <Text style={styles.historyHoursLabel}>
-                      ⏱️ Duration: <Text style={{color: Colors.primary, fontWeight: '800'}}>{record.totalHours.toFixed(2)} hours</Text>
-                    </Text>
-                  ) : null}
+                  </TouchableOpacity>
                 </View>
-              ))
+
+                {/* Associated Contractors List */}
+                <View style={styles.scheduleCard}>
+                  <Text style={styles.sectionTitle}>👥 Associated Contractors</Text>
+                  <Text style={styles.sectionSubtitle}>View companies and contractors you are rostered with or have worked with.</Text>
+                  {loadingContractors ? (
+                    <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
+                  ) : contractors.length === 0 ? (
+                    <View style={styles.emptyContainer}>
+                      <Text style={styles.emptyEmoji}>👥</Text>
+                      <Text style={styles.emptyText}>No associated contractors</Text>
+                      <Text style={styles.emptySub}>Apply for freelance jobs or join their crew roster.</Text>
+                    </View>
+                  ) : (
+                    contractors.map((c) => (
+                      <TouchableOpacity
+                        key={c._id}
+                        style={styles.contractorCard}
+                        onPress={() => {
+                          setSelectedContractor(c);
+                          fetchContractorProjects(c._id);
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <View style={styles.contractorHeader}>
+                          <Text style={styles.contractorCompany}>{c.companyName || 'Freelance Contractor'}</Text>
+                          <Text style={styles.contractorName}>👤 {c.name}</Text>
+                        </View>
+                        <Text style={styles.contractorContact}>✉️ {c.email}  |  📞 {c.phoneNumber}</Text>
+                        <View style={styles.viewProjectsBtn}>
+                          <Text style={styles.viewProjectsBtnText}>View Shift History & Projects →</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </View>
+              </View>
             )}
           </View>
         )}
@@ -792,93 +901,6 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
           </View>
         )}
 
-        {activeTab === 'contractors' && (
-          <View>
-            {selectedContractor ? (
-              <View style={styles.scheduleCard}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                  <Text style={styles.sectionTitle}>📅 Completed Shifts under {selectedContractor.companyName || selectedContractor.name}</Text>
-                  <TouchableOpacity
-                    style={styles.backBtn}
-                    onPress={() => setSelectedContractor(null)}
-                  >
-                    <Text style={styles.backBtnText}>← Back</Text>
-                  </TouchableOpacity>
-                </View>
-                {loadingProjects ? (
-                  <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
-                ) : contractorProjects.length === 0 ? (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyEmoji}>📅</Text>
-                    <Text style={styles.emptyText}>No completed shifts found</Text>
-                    <Text style={styles.emptySub}>You haven't completed any shifts under this contractor yet.</Text>
-                  </View>
-                ) : (
-                  contractorProjects.map((proj) => {
-                    const status = getStatusConfig(proj.status);
-                    return (
-                      <View key={proj._id} style={styles.projectCard}>
-                        <View style={styles.projectHeader}>
-                          <Text style={styles.projectTitle}>📍 {proj.address}</Text>
-                          <View style={[styles.statusBadge, { backgroundColor: status.bgColor }]}>
-                            <Text style={[styles.statusBadgeText, { color: status.color }]}>{status.label}</Text>
-                          </View>
-                        </View>
-                        <Text style={styles.projectTime}>
-                          📅 Date: {new Date(proj.startTime).toLocaleDateString()}
-                        </Text>
-                        <Text style={styles.projectTime}>
-                          ⏱️ Worked: {proj.totalHoursWorked || 0} hrs
-                        </Text>
-                        {proj.customerName && (
-                          <Text style={styles.projectTime}>
-                            👤 Client: {proj.customerName}
-                          </Text>
-                        )}
-                      </View>
-                    );
-                  })
-                )}
-              </View>
-            ) : (
-              <View style={styles.scheduleCard}>
-                <Text style={styles.sectionTitle}>👥 Associated Contractors</Text>
-                <Text style={styles.sectionSubtitle}>View companies and contractors you are rostered with or have worked with.</Text>
-                {loadingContractors ? (
-                  <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
-                ) : contractors.length === 0 ? (
-                  <View style={styles.emptyContainer}>
-                    <Text style={styles.emptyEmoji}>👥</Text>
-                    <Text style={styles.emptyText}>No associated contractors</Text>
-                    <Text style={styles.emptySub}>Apply for freelance jobs or join their crew roster.</Text>
-                  </View>
-                ) : (
-                  contractors.map((c) => (
-                    <TouchableOpacity
-                      key={c._id}
-                      style={styles.contractorCard}
-                      onPress={() => {
-                        setSelectedContractor(c);
-                        fetchContractorProjects(c._id);
-                      }}
-                      activeOpacity={0.8}
-                    >
-                      <View style={styles.contractorHeader}>
-                        <Text style={styles.contractorCompany}>{c.companyName || 'Freelance Contractor'}</Text>
-                        <Text style={styles.contractorName}>👤 {c.name}</Text>
-                      </View>
-                      <Text style={styles.contractorContact}>✉️ {c.email}  |  📞 {c.phoneNumber}</Text>
-                      <View style={styles.viewProjectsBtn}>
-                        <Text style={styles.viewProjectsBtnText}>View Shift History →</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))
-                )}
-              </View>
-            )}
-          </View>
-        )}
-
         {activeTab === 'profile' && renderProfileTab()}
 
         <AppFooter />
@@ -890,29 +912,18 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
           style={styles.tabBarItem}
           activeOpacity={0.8}
           hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
-          onPress={() => setActiveTab('jobs')}
-        >
-          <Text style={[styles.tabBarIcon, activeTab === 'jobs' && styles.tabBarIconActive]}>🏠</Text>
-          <Text style={[styles.tabBarLabel, activeTab === 'jobs' && styles.tabBarLabelActive]}>Jobs</Text>
-          {activeTab === 'jobs' && <View style={styles.tabActiveIndicator} />}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabBarItem}
-          activeOpacity={0.8}
-          hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
-          onPress={() => setActiveTab('offers')}
+          onPress={() => setActiveTab('home')}
         >
           <View style={styles.iconBadgeWrapper}>
-            <Text style={[styles.tabBarIcon, activeTab === 'offers' && styles.tabBarIconActive]}>📥</Text>
+            <Text style={[styles.tabBarIcon, activeTab === 'home' && styles.tabBarIconActive]}>🏠</Text>
             {pendingCount > 0 && (
               <View style={styles.tabBadge}>
                 <Text style={styles.tabBadgeText}>{pendingCount}</Text>
               </View>
             )}
           </View>
-          <Text style={[styles.tabBarLabel, activeTab === 'offers' && styles.tabBarLabelActive]}>Offers</Text>
-          {activeTab === 'offers' && <View style={styles.tabActiveIndicator} />}
+          <Text style={[styles.tabBarLabel, activeTab === 'home' && styles.tabBarLabelActive]}>Home</Text>
+          {activeTab === 'home' && <View style={styles.tabActiveIndicator} />}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -924,28 +935,6 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
           <Text style={[styles.tabBarIcon, activeTab === 'freelance' && styles.tabBarIconActive]}>💼</Text>
           <Text style={[styles.tabBarLabel, activeTab === 'freelance' && styles.tabBarLabelActive]}>Freelance</Text>
           {activeTab === 'freelance' && <View style={styles.tabActiveIndicator} />}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabBarItem}
-          activeOpacity={0.8}
-          hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
-          onPress={() => setActiveTab('contractors')}
-        >
-          <Text style={[styles.tabBarIcon, activeTab === 'contractors' && styles.tabBarIconActive]}>👥</Text>
-          <Text style={[styles.tabBarLabel, activeTab === 'contractors' && styles.tabBarLabelActive]}>Contractors</Text>
-          {activeTab === 'contractors' && <View style={styles.tabActiveIndicator} />}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabBarItem}
-          activeOpacity={0.8}
-          hitSlop={{ top: 15, bottom: 15, left: 10, right: 10 }}
-          onPress={() => setActiveTab('history')}
-        >
-          <Text style={[styles.tabBarIcon, activeTab === 'history' && styles.tabBarIconActive]}>📊</Text>
-          <Text style={[styles.tabBarLabel, activeTab === 'history' && styles.tabBarLabelActive]}>My Shifts</Text>
-          {activeTab === 'history' && <View style={styles.tabActiveIndicator} />}
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -1804,6 +1793,107 @@ const styles = StyleSheet.create({
   calendarCloseBtnText: {
     fontSize: 14,
     fontWeight: '700',
+    color: '#334155'
+  },
+  tableHeaderRow: {
+    flexDirection: 'row',
+    backgroundColor: '#F1F5F9',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginBottom: 6
+  },
+  tableHeaderCell: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#475569',
+    textTransform: 'uppercase'
+  },
+  tableBodyRow: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    alignItems: 'center'
+  },
+  tableBodyCell: {
+    fontSize: 12,
+    color: '#334155',
+    fontWeight: '600'
+  },
+  totalSummaryBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12
+  },
+  totalSummaryLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#065F46'
+  },
+  totalSummaryValue: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: '#047857'
+  },
+  emptyTableText: {
+    textAlign: 'center',
+    color: '#64748B',
+    fontSize: 13,
+    paddingVertical: 20
+  },
+  periodSelectBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: '#FFFFFF'
+  },
+  periodSelectText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#334155'
+  },
+  dropdownArrowIcon: {
+    fontSize: 12,
+    color: '#64748B'
+  },
+  periodDropdownMenu: {
+    position: 'absolute',
+    top: 48,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1.2,
+    borderColor: '#E2E8F0',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    zIndex: 50
+  },
+  periodDropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9'
+  },
+  periodDropdownItemText: {
+    fontSize: 13,
+    fontWeight: '600',
     color: '#334155'
   }
 });
