@@ -66,7 +66,7 @@ const ClientDashboard = ({ user, onLogout }) => {
   const [postLocation, setPostLocation] = useState('');
   const [postDate, setPostDate] = useState('');
   const [postTime, setPostTime] = useState('');
-  const [postDuration, setPostDuration] = useState('120');
+  const [postDuration, setPostDuration] = useState('');
   const [searchingPlace, setSearchingPlace] = useState(false);
   const [searchSuggestions, setSearchSuggestions] = useState([]);
   const [searchLocationSuggestions, setSearchLocationSuggestions] = useState([]);
@@ -461,7 +461,7 @@ const ClientDashboard = ({ user, onLogout }) => {
                 setPostLocation('');
                 setPostDate('');
                 setPostTime('');
-                setPostDuration('120');
+                setPostDuration('');
                 setActiveTab('inbox');
               }
             }
