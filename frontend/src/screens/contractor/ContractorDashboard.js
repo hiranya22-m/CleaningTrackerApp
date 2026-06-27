@@ -1574,9 +1574,9 @@ const ContractorDashboard = ({ user, onLogout }) => {
       const stats = workerProfileStats || { totalJobsCount: 0, completedJobsCount: 0, totalHours: 0, totalPayout: 0, hourlyRate: 25 };
       const completedJobs = workerProfileJobs.filter(j => j.status === 'completed');
       
-      // Filter ongoing projects (pending/active status) assigned to this worker
+      // Filter ongoing projects (active status) assigned to this worker
       const workerOngoingProjects = contracts.filter(c => {
-        const isOngoing = c.status === 'active' || c.status === 'pending';
+        const isOngoing = c.status === 'active';
         if (!isOngoing) return false;
         return c.assignments?.some(assign => {
           const workerId = assign.workerId?._id || assign.workerId;
@@ -1585,7 +1585,17 @@ const ContractorDashboard = ({ user, onLogout }) => {
         });
       });
 
+      // Filter handed over projects (completed status) assigned to this worker
+      const handedOverProjects = contracts.filter(c => {
+        if (c.status !== 'completed') return false;
+        return c.assignments?.some(assign => {
+          const workerId = assign.workerId?._id || assign.workerId;
+          return workerId && workerId.toString() === selectedRosterWorker._id.toString();
+        });
+      });
+
       // Filter eligible contracts (pending/active status) not yet assigned to this worker
+      // Hand Over Project dropdown -> show only ongoing projects (pending/active)
       const eligibleContracts = contracts.filter(c => {
         const isOngoing = c.status === 'active' || c.status === 'pending';
         if (!isOngoing) return false;
@@ -1638,6 +1648,22 @@ const ContractorDashboard = ({ user, onLogout }) => {
               workerOngoingProjects.map(c => (
                 <View key={c._id} style={styles.miniProjectCard}>
                   <Text style={styles.miniProjectTitle}>🧹 {c.clientName}</Text>
+                  <Text style={styles.miniProjectSub}>📍 Location: {c.location?.address}</Text>
+                  <Text style={styles.miniProjectSub}>📅 Date: {new Date(c.schedule?.date).toLocaleDateString()}</Text>
+                </View>
+              ))
+            )}
+          </View>
+
+          {/* Handed Over Projects Section */}
+          <View style={styles.profileSection}>
+            <Text style={styles.profileSectionTitle}>Handed over projects:</Text>
+            {handedOverProjects.length === 0 ? (
+              <Text style={styles.emptySectionText}>No completed projects.</Text>
+            ) : (
+              handedOverProjects.map(c => (
+                <View key={c._id} style={styles.miniProjectCard}>
+                  <Text style={styles.miniProjectTitle}>✅ {c.clientName}</Text>
                   <Text style={styles.miniProjectSub}>📍 Location: {c.location?.address}</Text>
                   <Text style={styles.miniProjectSub}>📅 Date: {new Date(c.schedule?.date).toLocaleDateString()}</Text>
                 </View>
@@ -1707,11 +1733,12 @@ const ContractorDashboard = ({ user, onLogout }) => {
             <Text style={styles.profileSectionTitle}>Real-time GPS Tracking details:</Text>
             {(() => {
               const activeContract = contracts.find(c => {
-                const isOngoing = c.status === 'active' || c.status === 'pending';
+                const isOngoing = c.status === 'active';
                 if (!isOngoing) return false;
                 return c.assignments?.some(assign => {
                   const wId = assign.workerId?._id || assign.workerId;
-                  return wId && wId.toString() === selectedRosterWorker._id.toString();
+                  const isWorking = ['Traveling', 'Arrived', 'Working', 'Left Work Area'].includes(assign.workerStatus);
+                  return wId && wId.toString() === selectedRosterWorker._id.toString() && isWorking;
                 });
               });
 
