@@ -3987,12 +3987,12 @@ const ContractorDashboard = ({ user, onLogout }) => {
               style={{ maxHeight: 300, marginVertical: 10 }}
               showsVerticalScrollIndicator={false}
             >
-              {workers.length === 0 ? (
+              {rosterWorkers.length === 0 ? (
                 <Text style={{ textAlign: 'center', color: '#64748B', fontSize: 13, marginVertical: 20 }}>
                   No active workers available.
                 </Text>
               ) : (
-                workers.map(worker => (
+                rosterWorkers.map(worker => (
                   <TouchableOpacity
                     key={worker._id}
                     style={{
