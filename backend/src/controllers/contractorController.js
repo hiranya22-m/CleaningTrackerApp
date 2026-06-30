@@ -308,18 +308,8 @@ exports.getClientRequests = async (req, res) => {
       'offers.contractor': { $ne: req.user.id }
     };
 
-    if (tags.length > 0) {
-      filter.category = { $in: tags };
-    }
-    
-    if (locations.length > 0) {
-      const escapedLocs = locations
-        .map(loc => loc.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'))
-        .filter(Boolean);
-      if (escapedLocs.length > 0) {
-        filter.location = { $regex: escapedLocs.join('|'), $options: 'i' };
-      }
-    }
+    // Removed strict tags and location filtering so contractors can view all pending requests.
+    // If needed in the future, advanced search/filter can be implemented on the frontend.
 
     const requests = await ClientRequest.find(filter)
       .populate('client', 'name email phoneNumber')
