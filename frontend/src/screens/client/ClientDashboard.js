@@ -198,15 +198,24 @@ const ClientDashboard = ({ user, onLogout }) => {
           setMapLat(loc.coords.latitude);
           setMapLng(loc.coords.longitude);
           
-          let reverseGeocode = await Location.reverseGeocodeAsync({
-            latitude: loc.coords.latitude,
-            longitude: loc.coords.longitude
-          });
-          
-          if (reverseGeocode && reverseGeocode.length > 0) {
-            const addr = reverseGeocode[0];
-            const addressString = `${addr.street || addr.name || ''}, ${addr.city || addr.subregion || ''}, ${addr.region || ''}`.replace(/^[,\s]+|[,\s]+$/g, '');
-            setPostLocation(prev => prev || addressString);
+          const response = await fetch(`https://photon.komoot.io/reverse?lon=${loc.coords.longitude}&lat=${loc.coords.latitude}&lang=en`);
+          const data = await response.json();
+          if (data && data.features && data.features.length > 0) {
+            const props = data.features[0].properties || {};
+            const parts = [];
+            if (props.name) parts.push(props.name);
+            if (props.housenumber) parts.push(props.housenumber);
+            if (props.street) parts.push(props.street);
+            if (props.district) parts.push(props.district);
+            if (props.city) parts.push(props.city);
+            if (props.state) parts.push(props.state);
+            if (props.postcode) parts.push(props.postcode);
+            if (props.country) parts.push(props.country);
+            
+            let displayName = parts.filter(Boolean).join(', ');
+            if (displayName) {
+              setPostLocation(prev => prev || displayName);
+            }
           }
         } catch (e) {
           console.log('Error getting location:', e);
@@ -758,14 +767,15 @@ const ClientDashboard = ({ user, onLogout }) => {
               required
             />
 
-            <View style={{ zIndex: 10, position: 'relative' }}>
-              <CustomInput
-                label="Location / Address"
+            {/* Search Address (Easiest Method) */}
+            <View style={styles.searchPlaceContainer}>
+              <Text style={styles.fieldGroupLabel}>Search Address/Place (Easiest Method) 🔍</Text>
+              <TextInput
+                style={styles.searchPlaceInput}
+                placeholder="Enter city, state, country, or full address"
                 value={postLocation}
                 onChangeText={handlePlaceSearch}
-                placeholder="Enter city, state, country, or full address"
-                icon="📍"
-                required
+                placeholderTextColor="#94A3B8"
               />
               {searchSuggestions.length > 0 && (
                 <View style={styles.suggestionsBox}>
@@ -791,8 +801,9 @@ const ClientDashboard = ({ user, onLogout }) => {
               )}
             </View>
 
-            <View style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden' }}>
-              <EmbeddedGoogleMap 
+            {/* Google Maps Coordinates Picker */}
+            <Text style={styles.fieldGroupLabel}>Google Maps Location Picker <Text style={{ color: Colors.danger }}>*</Text></Text>
+            <EmbeddedGoogleMap 
                 latitude={mapLat} 
                 longitude={mapLng} 
                 height={200}
@@ -800,13 +811,28 @@ const ClientDashboard = ({ user, onLogout }) => {
                   setMapLat(lat);
                   setMapLng(lng);
                   try {
-                    let reverseGeocode = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
-                    if (reverseGeocode && reverseGeocode.length > 0) {
-                      const addr = reverseGeocode[0];
-                      const addressString = `${addr.street || addr.name || ''}, ${addr.city || addr.subregion || ''}, ${addr.region || ''}`.replace(/^[,\s]+|[,\s]+$/g, '');
-                      setPostLocation(addressString);
+                    const response = await fetch(`https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}&lang=en`);
+                    const data = await response.json();
+                    if (data && data.features && data.features.length > 0) {
+                      const props = data.features[0].properties || {};
+                      const parts = [];
+                      if (props.name) parts.push(props.name);
+                      if (props.housenumber) parts.push(props.housenumber);
+                      if (props.street) parts.push(props.street);
+                      if (props.district) parts.push(props.district);
+                      if (props.city) parts.push(props.city);
+                      if (props.state) parts.push(props.state);
+                      if (props.postcode) parts.push(props.postcode);
+                      if (props.country) parts.push(props.country);
+                      
+                      let displayName = parts.filter(Boolean).join(', ');
+                      if (displayName) {
+                        setPostLocation(displayName);
+                      }
                     }
-                  } catch (e) {}
+                  } catch (e) {
+                    console.warn("Reverse geocode error:", e);
+                  }
                 }}
               />
             </View>
@@ -1762,6 +1788,49 @@ const styles = StyleSheet.create({
   calendarCloseBtnText: {
     color: '#0F172A',
     fontWeight: '800'
+  },
+  searchPlaceContainer: {
+    backgroundColor: '#F8FAFC',
+    borderRadius: 16,
+    padding: 12,
+    borderWidth: 1.2,
+    borderColor: '#CBD5E1',
+    marginBottom: 14
+  },
+  searchPlaceInput: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    borderWidth: 1.2,
+    borderColor: '#CBD5E1',
+    height: 44,
+    paddingHorizontal: 12,
+    fontSize: 12.5,
+    fontWeight: '650',
+    color: '#0F172A'
+  },
+  selectedAddressContainer: {
+    backgroundColor: 'rgba(16, 185, 129, 0.04)',
+    borderWidth: 1.2,
+    borderColor: 'rgba(16, 185, 129, 0.15)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    marginTop: 10,
+    width: '100%'
+  },
+  selectedAddressLabel: {
+    fontSize: 11,
+    color: '#059669',
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4
+  },
+  selectedAddressText: {
+    fontSize: 12.5,
+    color: '#1F2937',
+    fontWeight: '700',
+    lineHeight: 18
   },
   suggestionsBox: {
     backgroundColor: '#FFFFFF',
