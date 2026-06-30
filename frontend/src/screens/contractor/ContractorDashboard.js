@@ -91,6 +91,9 @@ const ContractorDashboard = ({ user, onLogout }) => {
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [selectedAssignmentForReassign, setSelectedAssignmentForReassign] = useState(null);
+  const [reassigningWorker, setReassigningWorker] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [subscription, setSubscription] = useState(null);
   const [activeTab, setActiveTab] = useState('projects'); // 'projects', 'newContract', 'gps'
@@ -1326,7 +1329,15 @@ const ContractorDashboard = ({ user, onLogout }) => {
       setNotifications(prev => prev.map(n => n._id === notif._id ? { ...n, read: true } : n));
       setUnreadNotificationsCount(prev => Math.max(0, prev - 1));
       setShowNotificationsModal(false);
-      if (notif.type === 'offer_accepted' || (notif.data && notif.data.contractId)) {
+      
+      if (notif.type === 'worker_rejected_assignment' || notif.type === 'contract_expired') {
+        if (notif.data && notif.data.assignmentId) {
+          setSelectedAssignmentForReassign(notif.data.assignmentId);
+          setShowReassignModal(true);
+        } else {
+          Alert.alert('Error', 'Missing assignment details in notification.');
+        }
+      } else if (notif.type === 'offer_accepted' || (notif.data && notif.data.contractId)) {
         setBidsSubTab('accepted');
         navigateToTab('clientRequests');
       } else if (notif.type === 'contract_accepted') {
@@ -1334,6 +1345,26 @@ const ContractorDashboard = ({ user, onLogout }) => {
       }
     } catch (e) {
       console.warn('Failed to handle notification click:', e.message);
+    }
+  };
+
+  const handleReassignWorker = async (workerId) => {
+    if (!selectedAssignmentForReassign) return;
+    setReassigningWorker(true);
+    try {
+      const res = await api.post(`/contractor/reassign-worker/${selectedAssignmentForReassign}`, { workerId });
+      if (res.data.success) {
+        Alert.alert('Success 🎉', 'Worker reassigned successfully.');
+        setShowReassignModal(false);
+        setSelectedAssignmentForReassign(null);
+        fetchDashboardData();
+      } else {
+        Alert.alert('Error', res.data.message || 'Failed to reassign worker');
+      }
+    } catch (error) {
+      Alert.alert('Error', error.response?.data?.message || 'Something went wrong');
+    } finally {
+      setReassigningWorker(false);
     }
   };
 
@@ -3919,6 +3950,87 @@ const ContractorDashboard = ({ user, onLogout }) => {
             >
               <Text style={styles.calendarCloseBtnText}>Close</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Reassign Worker Modal */}
+      <Modal
+        visible={showReassignModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          setShowReassignModal(false);
+          setSelectedAssignmentForReassign(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.calendarContainer}>
+            <View style={styles.calendarHeader}>
+              <Text style={styles.calendarMonthTitle}>Re-assign Worker</Text>
+              <TouchableOpacity 
+                onPress={() => {
+                  setShowReassignModal(false);
+                  setSelectedAssignmentForReassign(null);
+                }}
+                style={styles.calendarNavBtn}
+              >
+                <Text style={styles.calendarNavBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={{ fontSize: 13, color: '#475569', marginVertical: 10 }}>
+              The assigned worker rejected or timed out. Please select a replacement:
+            </Text>
+
+            <ScrollView 
+              style={{ maxHeight: 300, marginVertical: 10 }}
+              showsVerticalScrollIndicator={false}
+            >
+              {workers.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: '#64748B', fontSize: 13, marginVertical: 20 }}>
+                  No active workers available.
+                </Text>
+              ) : (
+                workers.map(worker => (
+                  <TouchableOpacity
+                    key={worker._id}
+                    style={{
+                      padding: 12,
+                      backgroundColor: '#FFFFFF',
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: '#E2E8F0',
+                      marginBottom: 8,
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}
+                    onPress={() => handleReassignWorker(worker._id)}
+                    disabled={reassigningWorker}
+                  >
+                    <View>
+                      <Text style={{ fontWeight: '700', color: Colors.secondary, fontSize: 13 }}>
+                        {worker.name}
+                      </Text>
+                      <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                        {worker.status === 'busy' ? 'Currently Busy' : 'Available'}
+                      </Text>
+                    </View>
+                    <View style={{
+                      backgroundColor: reassigningWorker ? '#CBD5E1' : Colors.primary,
+                      paddingHorizontal: 12,
+                      paddingVertical: 6,
+                      borderRadius: 6
+                    }}>
+                      <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>
+                        Assign
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>

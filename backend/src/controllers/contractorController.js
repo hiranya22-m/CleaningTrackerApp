@@ -965,3 +965,80 @@ exports.handoverContract = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.reassignWorker = async (req, res) => {
+  try {
+    const { assignmentId } = req.params;
+    const { workerId } = req.body;
+
+    if (!workerId) {
+      return res.status(400).json({ success: false, message: 'New workerId is required' });
+    }
+
+    const WorkerAssignment = require('../models/WorkerAssignment');
+    const oldAssignment = await WorkerAssignment.findById(assignmentId);
+    
+    if (!oldAssignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found' });
+    }
+
+    if (!['rejected', 'expired'].includes(oldAssignment.response)) {
+      return res.status(400).json({ success: false, message: 'Only rejected or expired assignments can be reassigned' });
+    }
+
+    const contract = await Contract.findById(oldAssignment.contractId);
+    if (!contract || contract.contractorId.toString() !== req.user.id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to reassign this contract' });
+    }
+
+    // Remove old worker from contract workers array if they are there, add new worker
+    contract.workers = contract.workers.filter(id => id.toString() !== oldAssignment.workerId.toString());
+    if (!contract.workers.includes(workerId)) {
+      contract.workers.push(workerId);
+    }
+    await contract.save();
+
+    // Create new assignment
+    const timerMinutes = contract.isUrgent ? 5 : 24 * 60;
+    const responseDeadline = new Date(Date.now() + timerMinutes * 60 * 1000); 
+
+    const newAssignment = await WorkerAssignment.create({
+      contractId: contract._id,
+      workerId,
+      responseDeadline
+    });
+
+    const io = req.app.get('socketio');
+    const { notifyUser } = require('../services/notificationService');
+
+    await notifyUser(io, {
+      userId: workerId,
+      type: 'contract_request',
+      title: contract.isUrgent ? 'Urgent Contract Request' : 'New Contract Request',
+      message: contract.isUrgent 
+        ? `You have 10 minutes to respond to an urgent cleaning contract at ${contract.location.address}.`
+        : `You have 24 hours to respond to a cleaning contract at ${contract.location.address}.`,
+      data: {
+        assignmentId: newAssignment._id,
+        contractId: contract._id,
+        clientName: contract.clientName,
+        address: contract.location.address,
+        date: contract.schedule.date,
+        startTime: contract.schedule.startTime,
+        durationMinutes: contract.schedule.durationMinutes,
+        isUrgent: contract.isUrgent,
+        responseDeadline,
+        notes: contract.notes
+      },
+      socketEvent: 'worker_notification'
+    });
+
+    // Mark old assignment as replaced to prevent confusion (optional, or just leave it)
+    oldAssignment.response = 'expired'; // Or we can add a 'replaced' status later if needed
+    await oldAssignment.save();
+
+    res.status(200).json({ success: true, message: 'Worker successfully reassigned', newAssignment });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

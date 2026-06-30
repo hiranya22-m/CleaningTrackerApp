@@ -160,8 +160,17 @@ exports.respondToAssignment = async (req, res) => {
           userId: contract.contractorId,
           type: 'contract_promoted',
           title: 'Backup Worker Promoted',
-          message: 'A waitlisted worker was automatically promoted to confirmed roster.',
+          message: `Worker ${req.user.name || 'someone'} rejected the job, but a waitlisted worker was promoted.`,
           data: { contractId: contract._id, workerId: nextBackup.workerId },
+          socketEvent: 'contractor_notification'
+        });
+      } else {
+        await notifyUser(io, {
+          userId: contract.contractorId,
+          type: 'worker_rejected_assignment',
+          title: 'Worker Rejected Assignment',
+          message: `A worker rejected a contract. Please select a replacement.`,
+          data: { contractId: contract._id, assignmentId: assignment._id },
           socketEvent: 'contractor_notification'
         });
       }

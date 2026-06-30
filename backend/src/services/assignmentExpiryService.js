@@ -37,8 +37,8 @@ const processExpiredAssignments = async (io) => {
         userId: contract.contractorId,
         type: 'contract_expired',
         title: 'Worker Did Not Respond',
-        message: 'A worker did not respond before the deadline. The request has expired.',
-        data: { contractId: contract._id, workerId: assignment.workerId },
+        message: 'A worker did not respond before the deadline. The request has expired. Please select a replacement.',
+        data: { contractId: contract._id, workerId: assignment.workerId, assignmentId: assignment._id },
         socketEvent: 'contractor_notification'
       });
     }
