@@ -347,6 +347,12 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
+    
+    // Clear selections and filters on manual refresh
+    setSelectedJob(null);
+    setSelectedCompletedJob(null);
+    setSelectedEarning(null);
+    
     await loadData();
     if (activeTab === 'freelance') {
       await fetchFreelanceJobs();

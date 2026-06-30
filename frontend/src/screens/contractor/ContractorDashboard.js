@@ -404,6 +404,12 @@ const ContractorDashboard = ({ user, onLogout }) => {
   const loadInitialData = async () => {
     try {
       setRefreshing(true);
+      
+      // Clear selections and filters
+      setWorkerQuery('');
+      setSearchWorkerEmail('');
+      setFoundWorkerList([]);
+      
       const subRes = await contractorAPI.getSubscription();
       if (subRes.success) {
         setSubscription(subRes.subscription);

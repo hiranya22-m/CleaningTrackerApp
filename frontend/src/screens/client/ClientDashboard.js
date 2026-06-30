@@ -242,9 +242,21 @@ const ClientDashboard = ({ user, onLogout }) => {
     return days;
   };
 
-  const loadData = async () => {
+  const loadData = async (isManualRefresh = false) => {
     try {
       setRefreshing(true);
+      
+      if (isManualRefresh === true) {
+        // Clear form inputs and selections on refresh
+        setSearchLocation('');
+        setSelectedCategory(null);
+        setPostDesc('');
+        setPostLocation('');
+        setPostDate('');
+        setPostTime('');
+        setPostDuration('');
+        setContractors([]);
+      }
       if (activeTab === 'home' && selectedCategory) {
         await fetchContractors(selectedCategory.id);
       } else if (activeTab === 'inbox') {
@@ -620,7 +632,7 @@ const ClientDashboard = ({ user, onLogout }) => {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="always"
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={loadData} tintColor={Colors.primary} />
+          <RefreshControl refreshing={refreshing} onRefresh={() => loadData(true)} tintColor={Colors.primary} />
         }
       >
         {/* TAB 1: HOME */}
