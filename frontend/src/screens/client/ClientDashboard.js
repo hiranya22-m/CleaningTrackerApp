@@ -835,8 +835,13 @@ const ClientDashboard = ({ user, onLogout }) => {
                   }
                 }}
               />
-            </View>
 
+            {postLocation ? (
+              <View style={styles.selectedAddressContainer}>
+                <Text style={styles.selectedAddressLabel}>Selected Address: 📍</Text>
+                <Text style={styles.selectedAddressText}>{postLocation}</Text>
+              </View>
+            ) : null}
             <View style={styles.rowFields}>
               <View style={{ flex: 1 }}>
                 <CustomInput
