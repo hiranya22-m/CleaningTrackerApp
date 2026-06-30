@@ -495,6 +495,13 @@ const ContractorDashboard = ({ user, onLogout }) => {
     }
   }, [selectedContractForMap]);
 
+  useEffect(() => {
+    // When building a new contract, check worker availability if schedule changes
+    if (activeTab === 'newContract') {
+      fetchRoster(date, startTime, durationMinutes);
+    }
+  }, [date, startTime, durationMinutes, activeTab]);
+
   // ── Auto-resolve Contractor's Current Location ──
   useEffect(() => {
     const fetchCurrentLocation = async () => {
@@ -1090,9 +1097,9 @@ const ContractorDashboard = ({ user, onLogout }) => {
 
 
   // --- API Fetch Handlers ---
-  const fetchRoster = async () => {
+  const fetchRoster = async (d = date, st = startTime, dur = durationMinutes) => {
     try {
-      const res = await contractorAPI.getWorkers();
+      const res = await contractorAPI.getWorkers(d, st, dur);
       if (res.success) setRosterWorkers(res.workers);
     } catch (e) {
       console.warn('Failed to fetch roster:', e.message);
@@ -3456,13 +3463,54 @@ const ContractorDashboard = ({ user, onLogout }) => {
                     icon="📝"
                   />
 
-                  {/* Crew size stepper removed */}
-
-
-
-
-
-                  <TouchableOpacity
+                  {/* Crew Selection Section */}
+                  <View style={{ marginTop: 15, marginBottom: 20 }}>
+                    <Text style={styles.fieldGroupLabel}>Select Crew Members <Text style={{ color: Colors.danger }}>*</Text></Text>
+                    {rosterWorkers.length === 0 ? (
+                      <Text style={{ color: '#64748B', fontSize: 13, marginTop: 8 }}>
+                        No crew members on your roster. Please add some first.
+                      </Text>
+                    ) : (
+                      <View style={{ marginTop: 10 }}>
+                        {rosterWorkers.map(worker => {
+                          const isSelected = selectedWorkers.some(w => w._id === worker._id);
+                          const isBusy = worker.status === 'busy';
+                          return (
+                            <TouchableOpacity
+                              key={worker._id}
+                              style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                paddingVertical: 12,
+                                paddingHorizontal: 15,
+                                backgroundColor: isBusy ? '#F1F5F9' : (isSelected ? '#E0F2FE' : '#FFFFFF'),
+                                borderWidth: 1,
+                                borderColor: isBusy ? '#CBD5E1' : (isSelected ? Colors.primary : '#E2E8F0'),
+                                borderRadius: 8,
+                                marginBottom: 8,
+                                opacity: isBusy ? 0.6 : 1
+                              }}
+                              onPress={() => !isBusy && toggleSelectWorker(worker)}
+                              disabled={isBusy}
+                              activeOpacity={0.7}
+                            >
+                              <Text style={{ marginRight: 15, fontSize: 16 }}>
+                                {isBusy ? '🚫' : (isSelected ? '☑️' : '⬜')}
+                              </Text>
+                              <View style={{ flex: 1 }}>
+                                <Text style={{ fontSize: 14, fontWeight: '700', color: isBusy ? '#64748B' : Colors.secondary }}>
+                                  {worker.name}
+                                </Text>
+                                <Text style={{ fontSize: 12, color: isBusy ? '#EF4444' : '#64748B', marginTop: 2 }}>
+                                  {isBusy ? 'Busy at this time' : (worker.status || 'Available')}
+                                </Text>
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>                  <TouchableOpacity
                     style={[styles.dispatchBtn, loading && styles.dispatchBtnDisabled]}
                     onPress={handleCreateContract}
                     disabled={loading}

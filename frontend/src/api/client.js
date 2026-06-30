@@ -341,8 +341,17 @@ export const contractorAPI = {
     const res = await apiClient.post(`/contractor/client-requests/${requestId}/offer`, { price });
     return res.data;
   },
-  getWorkers: async () => {
-    const res = await apiClient.get('/contractor/workers');
+  getWorkers: async (date = '', startTime = '', durationMinutes = '') => {
+    let url = '/contractor/workers';
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (startTime) params.append('startTime', startTime);
+    if (durationMinutes) params.append('durationMinutes', durationMinutes);
+    
+    if (params.toString()) {
+      url += `?${params.toString()}`;
+    }
+    const res = await apiClient.get(url);
     return res.data;
   },
   addWorker: async (workerId) => {

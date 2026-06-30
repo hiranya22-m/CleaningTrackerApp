@@ -382,7 +382,69 @@ exports.submitOffer = async (req, res) => {
  */
 exports.getContractorWorkers = async (req, res) => {
   try {
-    const workers = await User.find({ role: 'worker', contractorId: req.user.id }).select('-password');
+    const { date, startTime, durationMinutes } = req.query;
+    
+    // 1. Fetch roster workers for this contractor
+    let workers = await User.find({ role: 'worker', contractorId: req.user.id }).select('-password').lean();
+
+    // 2. If scheduling parameters provided, check for conflicts
+    if (date && startTime && durationMinutes) {
+      const Contract = require('../models/Contract');
+      const WorkerAssignment = require('../models/WorkerAssignment');
+      
+      // Calculate proposed start and end times in minutes from midnight for easy comparison
+      const [pHours, pMins] = startTime.split(':').map(Number);
+      const proposedStartMins = pHours * 60 + pMins;
+      const proposedEndMins = proposedStartMins + parseInt(durationMinutes, 10);
+      
+      const targetDateStr = new Date(date).toISOString().split('T')[0];
+
+      // Find all contracts on the same date that have assignments
+      // We look at start of day to end of day to find contracts falling on the same date
+      const startOfDay = new Date(targetDateStr);
+      const endOfDay = new Date(startOfDay);
+      endOfDay.setDate(endOfDay.getDate() + 1);
+
+      const contractsOnDay = await Contract.find({
+        'schedule.date': { $gte: startOfDay, $lt: endOfDay }
+      }).lean();
+      
+      const contractIds = contractsOnDay.map(c => c._id);
+      
+      if (contractIds.length > 0) {
+        // Find accepted or pending assignments for our roster workers on these contracts
+        const workerIds = workers.map(w => w._id);
+        const assignments = await WorkerAssignment.find({
+          contractId: { $in: contractIds },
+          workerId: { $in: workerIds },
+          response: { $in: ['accepted', 'pending'] } // Consider both accepted and pending as busy
+        }).lean();
+
+        // Build a map of busy worker IDs
+        const busyWorkerIds = new Set();
+        
+        for (const assignment of assignments) {
+          const contract = contractsOnDay.find(c => c._id.toString() === assignment.contractId.toString());
+          if (contract && contract.schedule) {
+            const [cHours, cMins] = contract.schedule.startTime.split(':').map(Number);
+            const contractStartMins = cHours * 60 + cMins;
+            const contractEndMins = contractStartMins + contract.schedule.durationMinutes;
+            
+            // Check for overlap: Overlap happens if (StartA < EndB) and (StartB < EndA)
+            if (proposedStartMins < contractEndMins && contractStartMins < proposedEndMins) {
+              busyWorkerIds.add(assignment.workerId.toString());
+            }
+          }
+        }
+        
+        // Mark workers as busy
+        workers = workers.map(w => ({
+          ...w,
+          status: busyWorkerIds.has(w._id.toString()) ? 'busy' : w.status
+        }));
+      }
+    }
+
     res.status(200).json({ success: true, count: workers.length, workers });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
