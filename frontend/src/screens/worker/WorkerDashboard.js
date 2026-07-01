@@ -512,7 +512,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
     const end = new Date(start.getTime() + expectedHours * 3600 * 1000);
     
     const formatTime = (date) => {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
     };
 
     return `${formatTime(start)} - ${formatTime(end)}`;
@@ -624,7 +624,9 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
                       return (
                         <View key={assign._id} style={[styles.requestItem, { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0', padding: 12, borderRadius: 12, marginBottom: 8 }]}>
                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <Text style={{ fontWeight: '800', color: Colors.secondary, fontSize: 13 }}>{contract?.clientName || 'Private Customer'}</Text>
+                            <Text style={{ fontWeight: '800', color: Colors.secondary, fontSize: 13 }}>
+                              {contract?.contractorId?.companyName || contract?.contractorId?.name || contract?.clientName || 'Private Customer'}
+                            </Text>
                             <Text style={{ fontSize: 11, color: '#EF4444', fontWeight: '700' }}>🕒 {remaining}</Text>
                           </View>
                           <Text style={{ fontSize: 12, color: '#475569' }}>📍 {contract?.location?.address}</Text>
@@ -670,9 +672,12 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
                         <View key={job._id} style={styles.jobItemRow}>
                           <View style={styles.jobItemHeader}>
                             <View style={styles.addressCol}>
+                              <Text style={{ fontWeight: '800', color: Colors.secondary, fontSize: 13, marginBottom: 2 }} numberOfLines={1}>
+                                {job.contractor?.companyName || job.contractor?.name || job.clientName || 'Private Customer'}
+                              </Text>
                               <Text style={styles.addressText} numberOfLines={1}>📍 {job.address}</Text>
                               <Text style={styles.timeRangeText}>
-                                ⏰ {formatJobTimeRange(job.startTime, job.expectedHours)}
+                                📅 {new Date(job.startTime).toLocaleDateString()}  ⏰ {formatJobTimeRange(job.startTime, job.expectedHours)}
                               </Text>
                             </View>
                             <View style={[styles.statusBadge, { backgroundColor: status.bgColor }]}>

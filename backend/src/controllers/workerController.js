@@ -169,7 +169,7 @@ exports.respondToAssignment = async (req, res) => {
           userId: contract.contractorId,
           type: 'worker_rejected_assignment',
           title: 'Worker Rejected Assignment',
-          message: `A worker rejected a contract. Please select a replacement.`,
+          message: `${req.user.name} has rejected your contract request. Please select a replacement.`,
           data: { contractId: contract._id, assignmentId: assignment._id },
           socketEvent: 'contractor_notification'
         });
@@ -178,19 +178,21 @@ exports.respondToAssignment = async (req, res) => {
 
     const updatedContract = await activateContractIfReady(contract._id);
 
-    await notifyUser(io, {
-      userId: contract.contractorId,
-      type: finalResponse === 'accepted' ? 'contract_accepted' : 'contract_rejected',
-      title: finalResponse === 'waitlisted' ? 'Worker Waitlisted' : `Worker ${finalResponse}`,
-      message:
-        finalResponse === 'waitlisted'
-          ? `${req.user.name} accepted but is on the waitlist (slots filled).`
-          : finalResponse === 'rejected'
-            ? `${req.user.name} has rejected your contract request. Please assign that job to another crew member.`
-            : `${req.user.name} has accepted your contract request.`,
-      data: { contractId: contract._id, workerId: req.user._id, response: finalResponse },
-      socketEvent: 'contractor_notification'
-    });
+    if (finalResponse !== 'rejected') {
+      await notifyUser(io, {
+        userId: contract.contractorId,
+        type: finalResponse === 'accepted' ? 'contract_accepted' : 'contract_rejected',
+        title: finalResponse === 'waitlisted' ? 'Worker Waitlisted' : `Worker ${finalResponse}`,
+        message:
+          finalResponse === 'waitlisted'
+            ? `${req.user.name} accepted but is on the waitlist (slots filled).`
+            : finalResponse === 'rejected'
+              ? `${req.user.name} has rejected your contract request. Please assign that job to another crew member.`
+              : `${req.user.name} has accepted your contract request.`,
+        data: { contractId: contract._id, workerId: req.user._id, response: finalResponse },
+        socketEvent: 'contractor_notification'
+      });
+    }
 
     if (updatedContract?.status === 'active') {
       await notifyUser(io, {

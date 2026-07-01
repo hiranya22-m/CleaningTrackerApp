@@ -1719,93 +1719,11 @@ const ContractorDashboard = ({ user, onLogout }) => {
                   <Text style={styles.miniProjectSub}>📍 Location: {c.location?.address}</Text>
                   <Text style={styles.miniProjectSub}>📅 Date: {new Date(c.schedule?.date).toLocaleDateString()}</Text>
                   
-                  {isProjectCompletelyDone(c) ? (
-                    <TouchableOpacity
-                      style={[styles.handoverSubmitBtn, { marginTop: 8 }]}
-                      onPress={() => handleRealHandoverProject(c._id)}
-                    >
-                      <Text style={styles.handoverSubmitBtnText}>Hand Over Project</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <Text style={{ marginTop: 8, fontStyle: 'italic', color: '#64748B', fontSize: 12 }}>
-                      Waiting for crew to finish work...
-                    </Text>
-                  )}
-                </View>
-              ))
-            )}
-          </View>
-
-          {/* Handed Over Projects Section */}
-          <View style={styles.profileSection}>
-            <Text style={styles.profileSectionTitle}>Handed over projects:</Text>
-            {handedOverProjects.length === 0 ? (
-              <Text style={styles.emptySectionText}>No completed projects.</Text>
-            ) : (
-              handedOverProjects.map(c => (
-                <View key={c._id} style={styles.miniProjectCard}>
-                  <Text style={styles.miniProjectTitle}>✅ {c.clientName}</Text>
-                  <Text style={styles.miniProjectSub}>📍 Location: {c.location?.address}</Text>
-                  <Text style={styles.miniProjectSub}>📅 Date: {new Date(c.schedule?.date).toLocaleDateString()}</Text>
-                </View>
-              ))
-            )}
-          </View>
-
-          {/* Assign a Project Section */}
-          <View style={styles.profileSection}>
-            <Text style={styles.profileSectionTitle}>Assign a project:</Text>
-            {eligibleContracts.length === 0 ? (
-              <Text style={styles.emptySectionText}>No eligible projects available to assign.</Text>
-            ) : (
-              <View style={{ position: 'relative', zIndex: 30 }}>
-                <TouchableOpacity
-                  style={styles.handoverSelectBox}
-                  onPress={() => setShowHandoverDropdown(!showHandoverDropdown)}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.handoverSelectText}>
-                    {handoverContractId ? 
-                      contracts.find(c => c._id === handoverContractId)?.clientName || 'Selected Project' : 
-                      'Select a project to assign'
-                    }
+                  <Text style={{ marginTop: 8, fontStyle: 'italic', color: '#64748B', fontSize: 12 }}>
+                    Waiting for crew to finish work...
                   </Text>
-                  <Text style={styles.dropdownArrowIcon}>{showHandoverDropdown ? '▲' : '▼'}</Text>
-                </TouchableOpacity>
-
-                {showHandoverDropdown && (
-                  <View style={styles.handoverDropdownMenu}>
-                    <ScrollView nestedScrollEnabled style={{ maxHeight: 150 }}>
-                      {eligibleContracts.map((c) => (
-                        <TouchableOpacity
-                          key={c._id}
-                          style={styles.handoverDropdownItem}
-                          onPress={() => {
-                            setHandoverContractId(c._id);
-                            setShowHandoverDropdown(false);
-                          }}
-                        >
-                          <Text style={styles.handoverDropdownItemText} numberOfLines={1}>
-                            {c.clientName} ({new Date(c.schedule?.date).toLocaleDateString()})
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </ScrollView>
-                  </View>
-                )}
-
-                {handoverContractId ? (
-                  <TouchableOpacity
-                    style={styles.handoverSubmitBtn}
-                    onPress={() => handleHandoverProject(selectedRosterWorker._id)}
-                    disabled={assigningWorker}
-                  >
-                    <Text style={styles.handoverSubmitBtnText}>
-                      {assigningWorker ? "Assigning..." : "Assign Crew Member ➔"}
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
-              </View>
+                </View>
+              ))
             )}
           </View>
 
@@ -3472,42 +3390,55 @@ const ContractorDashboard = ({ user, onLogout }) => {
                       </Text>
                     ) : (
                       <View style={{ marginTop: 10 }}>
-                        {rosterWorkers.map(worker => {
-                          const isSelected = selectedWorkers.some(w => w._id === worker._id);
-                          const isBusy = worker.status === 'busy';
-                          return (
-                            <TouchableOpacity
-                              key={worker._id}
-                              style={{
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                paddingVertical: 12,
-                                paddingHorizontal: 15,
-                                backgroundColor: isBusy ? '#F1F5F9' : (isSelected ? '#E0F2FE' : '#FFFFFF'),
-                                borderWidth: 1,
-                                borderColor: isBusy ? '#CBD5E1' : (isSelected ? Colors.primary : '#E2E8F0'),
-                                borderRadius: 8,
-                                marginBottom: 8,
-                                opacity: isBusy ? 0.6 : 1
-                              }}
-                              onPress={() => !isBusy && toggleSelectWorker(worker)}
-                              disabled={isBusy}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={{ marginRight: 15, fontSize: 16 }}>
-                                {isBusy ? '🚫' : (isSelected ? '☑️' : '⬜')}
+                        {(() => {
+                          const displayedWorkers = selectedRosterWorker
+                            ? rosterWorkers.filter(w => w._id === selectedRosterWorker._id && w.status !== 'busy')
+                            : rosterWorkers.filter(w => w.status !== 'busy');
+                            
+                          if (displayedWorkers.length === 0) {
+                            return (
+                              <Text style={{ color: '#64748B', fontSize: 13, marginTop: 8, fontStyle: 'italic' }}>
+                                {selectedRosterWorker 
+                                  ? 'This worker is currently busy and cannot be assigned right now.' 
+                                  : 'All your roster workers are currently busy.'}
                               </Text>
-                              <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 14, fontWeight: '700', color: isBusy ? '#64748B' : Colors.secondary }}>
-                                  {worker.name}
+                            );
+                          }
+                          
+                          return displayedWorkers.map(worker => {
+                            const isSelected = selectedWorkers.some(w => w._id === worker._id);
+                            return (
+                              <TouchableOpacity
+                                key={worker._id}
+                                style={{
+                                  flexDirection: 'row',
+                                  alignItems: 'center',
+                                  paddingVertical: 12,
+                                  paddingHorizontal: 15,
+                                  backgroundColor: isSelected ? '#E0F2FE' : '#FFFFFF',
+                                  borderWidth: 1,
+                                  borderColor: isSelected ? Colors.primary : '#E2E8F0',
+                                  borderRadius: 8,
+                                  marginBottom: 8,
+                                }}
+                                onPress={() => toggleSelectWorker(worker)}
+                                activeOpacity={0.7}
+                              >
+                                <Text style={{ marginRight: 15, fontSize: 16 }}>
+                                  {isSelected ? '☑️' : '⬜'}
                                 </Text>
-                                <Text style={{ fontSize: 12, color: isBusy ? '#EF4444' : '#64748B', marginTop: 2 }}>
-                                  {isBusy ? 'Busy at this time' : (worker.status || 'Available')}
-                                </Text>
-                              </View>
-                            </TouchableOpacity>
-                          );
-                        })}
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.secondary }}>
+                                    {worker.name}
+                                  </Text>
+                                  <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
+                                    {worker.status || 'Available'}
+                                  </Text>
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          });
+                        })()}
                       </View>
                     )}
                   </View>                  <TouchableOpacity
@@ -4041,12 +3972,43 @@ const ContractorDashboard = ({ user, onLogout }) => {
               style={{ maxHeight: 300, marginVertical: 10 }}
               showsVerticalScrollIndicator={false}
             >
-              {rosterWorkers.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: '#64748B', fontSize: 13, marginVertical: 20 }}>
-                  No active workers available.
-                </Text>
-              ) : (
-                rosterWorkers.map(worker => (
+              {(() => {
+                let currentContractForReassign = null;
+                let rejectedWorkerIdForReassign = null;
+                
+                if (selectedAssignmentForReassign) {
+                  for (const c of contracts) {
+                    const assign = c.assignments?.find(a => a._id === selectedAssignmentForReassign);
+                    if (assign) {
+                      currentContractForReassign = c;
+                      rejectedWorkerIdForReassign = assign.workerId?._id || assign.workerId;
+                      break;
+                    }
+                  }
+                }
+                
+                const availableForReassign = rosterWorkers.filter(worker => {
+                  if (worker.status === 'busy') return false;
+                  if (rejectedWorkerIdForReassign && worker._id === rejectedWorkerIdForReassign) return false;
+                  if (currentContractForReassign) {
+                    const isAlreadyInContract = currentContractForReassign.assignments?.some(a => 
+                      (a.workerId?._id === worker._id || a.workerId === worker._id) && 
+                      (a.response === 'accepted' || a.response === 'pending')
+                    );
+                    if (isAlreadyInContract) return false;
+                  }
+                  return true;
+                });
+
+                if (availableForReassign.length === 0) {
+                  return (
+                    <Text style={{ textAlign: 'center', color: '#64748B', fontSize: 13, marginVertical: 20 }}>
+                      No active workers available for reassignment.
+                    </Text>
+                  );
+                }
+
+                return availableForReassign.map(worker => (
                   <TouchableOpacity
                     key={worker._id}
                     style={{
@@ -4068,7 +4030,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
                         {worker.name}
                       </Text>
                       <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
-                        {worker.status === 'busy' ? 'Currently Busy' : 'Available'}
+                        Available
                       </Text>
                     </View>
                     <View style={{
@@ -4082,8 +4044,8 @@ const ContractorDashboard = ({ user, onLogout }) => {
                       </Text>
                     </View>
                   </TouchableOpacity>
-                ))
-              )}
+                ));
+              })()}
             </ScrollView>
           </View>
         </View>
