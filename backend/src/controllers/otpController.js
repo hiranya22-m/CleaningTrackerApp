@@ -107,8 +107,8 @@ exports.requestOtp = async (req, res) => {
       });
     }
 
-    // --- Delete any existing OTP records for this email (fresh start) ---
-    await OTPVerification.deleteMany({ email: cleanEmail });
+    // --- DO NOT delete existing OTP records for this email (allow multiple valid codes) ---
+    // await OTPVerification.deleteMany({ email: cleanEmail });
 
     // --- Generate OTP and hash it ---
     const rawOtp = generate6DigitCode();
@@ -134,7 +134,6 @@ exports.requestOtp = async (req, res) => {
       try {
         emailResult = await emailService.sendOtpEmail(cleanEmail, rawOtp, requestedRole, isLogin);
       } catch (emailErr) {
-        await OTPVerification.deleteMany({ email: cleanEmail });
         console.error('OTP email sending failed:', emailErr.message);
         return res.status(503).json({
           success: false,
@@ -183,23 +182,18 @@ exports.verifyOtp = async (req, res) => {
 
     const cleanEmail = email.toLowerCase().trim();
 
-    // --- Find the latest OTP record for this email ---
-    const verification = await OTPVerification.findOne({ email: cleanEmail }).sort({ createdAt: -1 });
+    // --- Find all unexpired OTP records for this email ---
+    const verifications = await OTPVerification.find({ email: cleanEmail, expiresAt: { $gt: new Date() } }).sort({ createdAt: -1 });
 
-    if (!verification) {
-      return res.status(400).json({ success: false, message: 'No verification request found. Please request a new code.' });
+    if (verifications.length === 0) {
+      return res.status(400).json({ success: false, message: 'No valid verification request found or code expired. Please request a new code.' });
     }
 
-    // --- Check expiry ---
-    if (new Date() > verification.expiresAt) {
-      await verification.deleteOne();
-      return res.status(400).json({ success: false, message: 'Verification code has expired. Please request a new one.' });
-    }
-
-    // --- Check attempt limit ---
+    // --- Check attempt limit on the latest verification ---
+    const latestVerification = verifications[0];
     const attemptLimit = env.otpLoginAttemptLimit || 5;
-    if (verification.attempts >= attemptLimit) {
-      await verification.deleteOne();
+    if (latestVerification.attempts >= attemptLimit) {
+      await OTPVerification.deleteMany({ email: cleanEmail });
       return res.status(429).json({
         success: false,
         message: 'Maximum verification attempts exceeded. Please request a new code.'
@@ -207,13 +201,23 @@ exports.verifyOtp = async (req, res) => {
     }
 
     // --- Increment attempts before verifying ---
-    verification.attempts += 1;
-    await verification.save();
+    latestVerification.attempts += 1;
+    await latestVerification.save();
 
-    // --- Verify OTP ---
-    const isMatch = await verification.verifyCode(code);
+    // --- Verify OTP against ALL unexpired records ---
+    let isMatch = false;
+    let matchedVerification = null;
+    
+    for (const verification of verifications) {
+      if (await verification.verifyCode(code)) {
+        isMatch = true;
+        matchedVerification = verification;
+        break;
+      }
+    }
+
     if (!isMatch) {
-      const remaining = attemptLimit - verification.attempts;
+      const remaining = attemptLimit - latestVerification.attempts;
       return res.status(400).json({
         success: false,
         message: `Invalid verification code. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`
@@ -224,7 +228,7 @@ exports.verifyOtp = async (req, res) => {
     await OTPVerification.deleteMany({ email: cleanEmail });
 
     // --- Determine effective role (from OTP record for security) ---
-    const effectiveRole = verification.role;
+    const effectiveRole = matchedVerification.role;
 
     // --- Login or Register ---
     let user = await User.findOne({ email: cleanEmail });
