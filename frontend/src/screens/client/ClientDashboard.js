@@ -1120,7 +1120,10 @@ const ClientDashboard = ({ user, onLogout }) => {
           </View>
         )}
 
-        {/* TAB 4: PROFILE */}
+        {/* TAB 4: CONTRACTORS */}
+        {activeTab === 'contractors' && renderContractorsTab()}
+
+        {/* TAB 5: PROFILE */}
         {activeTab === 'profile' && renderProfileTab()}
       <AppFooter />
         </ScrollView>
@@ -1158,6 +1161,17 @@ const ClientDashboard = ({ user, onLogout }) => {
         >
           <Text style={[styles.tabIcon, activeTab === 'inbox' && styles.tabIconActive]}>📥</Text>
           <Text style={[styles.tabLabel, activeTab === 'inbox' && styles.tabLabelActive]}>Inbox</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'contractors' && styles.tabItemActive]}
+          onPress={() => setActiveTab('contractors')}
+          activeOpacity={0.7}
+          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+          pointerEvents="auto"
+        >
+          <Text style={[styles.tabIcon, activeTab === 'contractors' && styles.tabIconActive]}>??</Text>
+          <Text style={[styles.tabLabel, activeTab === 'contractors' && styles.tabLabelActive]}>Contractors</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -1336,6 +1350,69 @@ const ClientDashboard = ({ user, onLogout }) => {
             </TouchableOpacity>
           </View>
         </View>
+      {/* Rate Contractor Modal */}
+      <Modal
+        visible={ratingModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setRatingModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.calendarContainer, { padding: 20 }]}>
+            <Text style={[styles.sectionTitle, { marginBottom: 5 }]}>Rate Contractor</Text>
+            <Text style={{ color: '#64748B', marginBottom: 20, fontSize: 13 }}>
+              {selectedContractorToRate?.companyName || selectedContractorToRate?.name}
+            </Text>
+
+            <Text style={{ fontWeight: 'bold', color: Colors.secondary, marginBottom: 10 }}>Select Rating (1-5)</Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 }}>
+              {[1, 2, 3, 4, 5].map(star => (
+                <TouchableOpacity
+                  key={star}
+                  onPress={() => setRatingValue(star)}
+                  style={{
+                    padding: 10,
+                    borderRadius: 10,
+                    backgroundColor: ratingValue >= star ? Colors.primary : '#F1F5F9',
+                    width: 45,
+                    alignItems: 'center'
+                  }}
+                >
+                  <Text style={{ fontSize: 18, color: ratingValue >= star ? '#FFF' : '#94A3B8' }}>?</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <CustomInput
+              label="Review (Optional)"
+              value={ratingReview}
+              onChangeText={setRatingReview}
+              placeholder="Write a brief review..."
+              icon="??"
+            />
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+              <View style={{ flex: 1 }}>
+                <TouchableOpacity 
+                  style={[styles.calendarCloseBtn, { backgroundColor: '#F1F5F9' }]}
+                  onPress={() => setRatingModalVisible(false)}
+                >
+                  <Text style={[styles.calendarCloseBtnText, { color: '#64748B' }]}>Cancel</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ flex: 1 }}>
+                <TouchableOpacity 
+                  style={[styles.calendarCloseBtn, { backgroundColor: Colors.primary }]}
+                  onPress={handleRateContractor}
+                  disabled={submittingRating}
+                >
+                  <Text style={styles.calendarCloseBtnText}>{submittingRating ? 'Submitting...' : 'Submit'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
       </Modal>
     </View>
   );
@@ -2030,5 +2107,7 @@ const styles = StyleSheet.create({
 });
 
 export default ClientDashboard;
+
+
 
 
