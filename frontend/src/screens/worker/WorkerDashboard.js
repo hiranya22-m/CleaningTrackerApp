@@ -221,8 +221,11 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
           }
         }
         setActiveTab('home');
+        setActiveTab('home');
       } else if (notif.type === 'freelance_contract') {
-        navigateToTab('freelance');
+        setActiveTab('freelance');
+      } else if (notif.type === 'contract_promoted' || notif.type === 'freelance_approved') {
+        setActiveTab('home');
       }
     } catch (e) {
       console.warn('Failed to handle notification click:', e.message);
@@ -1023,11 +1026,6 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
         >
           <View style={styles.iconBadgeWrapper}>
             <Text style={[styles.tabBarIcon, activeTab === 'home' && styles.tabBarIconActive]}>🏠</Text>
-            {pendingCount > 0 && (
-              <View style={styles.tabBadge}>
-                <Text style={styles.tabBadgeText}>{pendingCount}</Text>
-              </View>
-            )}
           </View>
           <Text style={[styles.tabBarLabel, activeTab === 'home' && styles.tabBarLabelActive]}>Home</Text>
           {activeTab === 'home' && <View style={styles.tabActiveIndicator} />}
