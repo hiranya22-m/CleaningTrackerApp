@@ -1,10 +1,8 @@
+import AppFooter from '../../components/AppFooter';
 import React, { useState, useEffect } from 'react';
-import AppFooter from '../../components/AppFooter';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
-import AppFooter from '../../components/AppFooter';
 import { Colors } from '../../theme/colors';
 import MapViewContainer from '../../components/MapViewContainer';
-import AppFooter from '../../components/AppFooter';
 import { locationAPI, getBaseUrl } from '../../api/client';
 import io from 'socket.io-client';
 
@@ -374,5 +372,6 @@ const styles = StyleSheet.create({
 });
 
 export default LiveTrackingScreen;
+
 
 

@@ -1,9 +1,7 @@
+import AppFooter from '../../components/AppFooter';
 import React, { useState, useEffect } from 'react';
-import AppFooter from '../../components/AppFooter';
 import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
-import AppFooter from '../../components/AppFooter';
 import { Colors } from '../../theme/colors';
-import AppFooter from '../../components/AppFooter';
 import { attendanceAPI, authAPI } from '../../api/client';
 
 const AttendanceReportsScreen = () => {
@@ -359,5 +357,6 @@ const styles = StyleSheet.create({
 });
 
 export default AttendanceReportsScreen;
+
 
 

@@ -1,11 +1,9 @@
+import AppFooter from '../../components/AppFooter';
 import React, { useState, useEffect, useRef } from 'react';
-import AppFooter from '../../components/AppFooter';
 import { View, Text, ScrollView, StyleSheet, Alert, TouchableOpacity, Platform } from 'react-native';
-import AppFooter from '../../components/AppFooter';
 import { Colors } from '../../theme/colors';
 import MapViewContainer from '../../components/MapViewContainer';
 import CustomButton from '../../components/CustomButton';
-import AppFooter from '../../components/AppFooter';
 import { jobsAPI, locationAPI, workerAPI, getBaseUrl, getAuthTokenStore } from '../../api/client';
 import io from 'socket.io-client';
 import * as Location from 'expo-location';
@@ -940,5 +938,6 @@ const styles = StyleSheet.create({
 });
 
 export default ActiveJobScreen;
+
 
 
