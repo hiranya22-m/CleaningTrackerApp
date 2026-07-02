@@ -872,7 +872,16 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
                               const payout = parseFloat((hours * rate).toFixed(2));
                               return (
                                 <View key={job._id} style={styles.tableBodyRow}>
-                                  <Text style={[styles.tableBodyCell, { width: '25%' }]} numberOfLines={1}>{job.customerName}</Text>
+                                  <View style={[styles.tableBodyCell, { width: '25%', flexDirection: 'column' }]}>
+                                    <Text numberOfLines={1} style={{ fontSize: 13, color: '#1E293B' }}>
+                                      {job.customerName && job.customerName.startsWith('Freelance Job:') ? job.customerName.replace('Freelance Job: ', '') : job.customerName}
+                                    </Text>
+                                    {job.customerName && job.customerName.startsWith('Freelance Job:') && (
+                                      <Text style={{ fontSize: 10, color: '#3B82F6', fontWeight: 'bold', marginTop: 2 }}>
+                                        [Freelance Contract]
+                                      </Text>
+                                    )}
+                                  </View>
                                   <Text style={[styles.tableBodyCell, { width: '25%' }]} numberOfLines={1}>{job.address}</Text>
                                   <Text style={[styles.tableBodyCell, { width: '20%' }]} numberOfLines={1}>
                                     {new Date(job.startTime).toLocaleDateString(undefined, {month: 'numeric', day: 'numeric'})}
