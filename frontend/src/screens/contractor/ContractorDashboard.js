@@ -1882,7 +1882,37 @@ const ContractorDashboard = ({ user, onLogout }) => {
             })()}
           </View>
 
-          {/* Projects Covered Section */}
+          {/* Covered Projects Section */}
+          <View style={[styles.profileSection, { marginBottom: 20 }]}>
+            <Text style={[styles.profileSectionTitle, { fontSize: 14, marginBottom: 8 }]}>?? Covered projects ({completedJobs.length}):</Text>
+            {completedJobs.length === 0 ? (
+              <Text style={{ color: '#64748B', fontSize: 12, paddingLeft: 8 }}>No covered projects found.</Text>
+            ) : (
+              completedJobs.map(c => {
+                const status = getStatusConfig(c.status);
+                return (
+                  <View key={c._id + "_cov"} style={styles.jobItemRow}>
+                    <View style={styles.jobItemHeader}>
+                      <View style={styles.addressCol}>
+                        <Text style={{ fontWeight: '800', color: Colors.secondary, fontSize: 13, marginBottom: 2 }} numberOfLines={1}>
+                          {c.customerName || 'Private Customer'} {c.customerName && c.customerName.startsWith('Freelance') ? '[Freelance]' : ''}
+                        </Text>
+                        <Text style={styles.addressText} numberOfLines={1}>?? {c.address}</Text>
+                        <Text style={styles.timeRangeText}>
+                          ?? {new Date(c.startTime).toLocaleDateString()}
+                        </Text>
+                      </View>
+                      <View style={[styles.statusBadge, { backgroundColor: status.bgColor }]}>
+                        <Text style={[styles.statusBadgeText, { color: status.color }]}>{status.label}</Text>
+                      </View>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </View>
+
+          {/* Automated Paysheet Section */}
           <View style={[styles.profileSection, { zIndex: 10 }]}>
             <Text style={styles.profileSectionTitle}>Automated Paysheet (App Calculated):</Text>
             <Text style={styles.automatedLabel}>⚠️ Payouts are computed automatically based on verified clock-in durations and GPS logs. Overrides or manual calculations by the contractor are disabled.</Text>
