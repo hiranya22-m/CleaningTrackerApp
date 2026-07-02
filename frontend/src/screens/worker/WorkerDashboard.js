@@ -801,9 +801,45 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
 
                 <View style={styles.divider} />
 
-                {/* 3. Projects covered & Automated Paysheet */}
+                {/* 3. Covered Projects (Separated) */}
+                <View style={{ marginBottom: 20 }}>
+                  <Text style={[styles.sectionTitle, { fontSize: 16, marginBottom: 12, color: Colors.primary, fontWeight: '800' }]}>📁 Covered Projects ({
+                    jobs.filter(j => j.contractor && (j.contractor._id || j.contractor).toString() === selectedContractor._id.toString() && j.status === 'completed').length
+                  })</Text>
+                  {(() => {
+                    const completedJobsList = jobs.filter(j => j.contractor && (j.contractor._id || j.contractor).toString() === selectedContractor._id.toString() && j.status === 'completed');
+                    if (completedJobsList.length === 0) {
+                      return <Text style={{ color: '#64748B', fontSize: 12, paddingLeft: 8 }}>No covered projects found.</Text>;
+                    }
+                    return completedJobsList.map(job => {
+                      const status = getStatusConfig(job.status);
+                      return (
+                        <View key={job._id + "_cov"} style={styles.jobItemRow}>
+                          <View style={styles.jobItemHeader}>
+                            <View style={styles.addressCol}>
+                              <Text style={{ fontWeight: '800', color: Colors.secondary, fontSize: 13, marginBottom: 2 }} numberOfLines={1}>
+                                {job.contractor?.companyName || job.contractor?.name || job.clientName || 'Private Customer'}
+                              </Text>
+                              <Text style={styles.addressText} numberOfLines={1}>📍 {job.address}</Text>
+                              <Text style={styles.timeRangeText}>
+                                📅 {new Date(job.startTime).toLocaleDateString()}
+                              </Text>
+                            </View>
+                            <View style={[styles.statusBadge, { backgroundColor: status.bgColor }]}>
+                              <Text style={[styles.statusBadgeText, { color: status.color }]}>{status.label}</Text>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    });
+                  })()}
+                </View>
+
+                <View style={styles.divider} />
+
+                {/* 4. Automated Paysheet */}
                 <View style={{ zIndex: 10, marginTop: 15 }}>
-                  <Text style={[styles.sectionTitle, { fontSize: 18, fontWeight: '800', marginBottom: 6, color: Colors.primary }]}>📊 Covered Projects & Automated Paysheet</Text>
+                  <Text style={[styles.sectionTitle, { fontSize: 16, marginBottom: 12, color: Colors.primary, fontWeight: '800' }]}>📊 Automated Paysheet</Text>
                   <Text style={styles.automatedLabel}>⚠️ Payouts are computed automatically based on verified clock-in durations and GPS logs.</Text>
                   
                   {/* Period Dropdown */}

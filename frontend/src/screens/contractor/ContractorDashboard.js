@@ -1780,7 +1780,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
 
           {/* Ongoing Projects Section */}
           <View style={[styles.profileSection, { marginBottom: 20 }]}>
-            <Text style={[styles.profileSectionTitle, { fontSize: 14, marginBottom: 8 }]}>? Ongoing projects ({workerOngoingProjects.length}):</Text>
+            <Text style={[styles.profileSectionTitle, { fontSize: 16, marginBottom: 12, color: Colors.primary, fontWeight: '800' }]}>📁 Ongoing Projects ({workerOngoingProjects.length})</Text>
             {workerOngoingProjects.length === 0 ? (
               <Text style={{ color: '#64748B', fontSize: 12, paddingLeft: 8 }}>No ongoing projects assigned.</Text>
             ) : (
@@ -1793,9 +1793,9 @@ const ContractorDashboard = ({ user, onLogout }) => {
                         <Text style={{ fontWeight: '800', color: Colors.secondary, fontSize: 13, marginBottom: 2 }} numberOfLines={1}>
                           {c.clientName || 'Private Customer'}
                         </Text>
-                        <Text style={styles.addressText} numberOfLines={1}>?? {c.location?.address}</Text>
+                        <Text style={styles.addressText} numberOfLines={1}>📍 {c.location?.address}</Text>
                         <Text style={styles.timeRangeText}>
-                          ?? {new Date(c.schedule?.date).toLocaleDateString()}  ? {formatJobTimeRange(c.schedule?.date, c.schedule?.durationMinutes ? c.schedule.durationMinutes/60 : 2)}
+                          📅 {new Date(c.schedule?.date).toLocaleDateString()}  ⏰ {formatJobTimeRange(c.schedule?.date, c.schedule?.durationMinutes ? c.schedule.durationMinutes/60 : 2)}
                         </Text>
                       </View>
                       <View style={[styles.statusBadge, { backgroundColor: status.bgColor }]}>
@@ -1884,7 +1884,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
 
           {/* Covered Projects Section */}
           <View style={[styles.profileSection, { marginBottom: 20 }]}>
-            <Text style={[styles.profileSectionTitle, { fontSize: 14, marginBottom: 8 }]}>?? Covered projects ({completedJobs.length}):</Text>
+            <Text style={[styles.profileSectionTitle, { fontSize: 16, marginBottom: 12, color: Colors.primary, fontWeight: '800' }]}>📁 Covered Projects ({completedJobs.length})</Text>
             {completedJobs.length === 0 ? (
               <Text style={{ color: '#64748B', fontSize: 12, paddingLeft: 8 }}>No covered projects found.</Text>
             ) : (
@@ -1897,9 +1897,9 @@ const ContractorDashboard = ({ user, onLogout }) => {
                         <Text style={{ fontWeight: '800', color: Colors.secondary, fontSize: 13, marginBottom: 2 }} numberOfLines={1}>
                           {c.customerName || 'Private Customer'} {c.customerName && c.customerName.startsWith('Freelance') ? '[Freelance]' : ''}
                         </Text>
-                        <Text style={styles.addressText} numberOfLines={1}>?? {c.address}</Text>
+                        <Text style={styles.addressText} numberOfLines={1}>📍 {c.address}</Text>
                         <Text style={styles.timeRangeText}>
-                          ?? {new Date(c.startTime).toLocaleDateString()}
+                          📅 {new Date(c.startTime).toLocaleDateString()}
                         </Text>
                       </View>
                       <View style={[styles.statusBadge, { backgroundColor: status.bgColor }]}>
@@ -1990,7 +1990,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
                         </Text>
                         <Text style={[styles.tableBodyCell, { width: '15%', textAlign: 'center' }]}>{hours}h</Text>
                         <Text style={[styles.tableBodyCell, { width: '15%', textAlign: 'right', fontWeight: '800', color: '#059669' }]}>
-                          
+                          ${payout}
                         </Text>
                       </View>
                     );
