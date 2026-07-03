@@ -1350,6 +1350,8 @@ const ClientDashboard = ({ user, onLogout }) => {
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
       {/* Rate Contractor Modal */}
       <Modal
         visible={ratingModalVisible}
@@ -1378,7 +1380,7 @@ const ClientDashboard = ({ user, onLogout }) => {
                     alignItems: 'center'
                   }}
                 >
-                  <Text style={{ fontSize: 18, color: ratingValue >= star ? '#FFF' : '#94A3B8' }}>?</Text>
+                  <Text style={{ fontSize: 18, color: ratingValue >= star ? '#FFF' : '#94A3B8' }}>⭐</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -1388,7 +1390,7 @@ const ClientDashboard = ({ user, onLogout }) => {
               value={ratingReview}
               onChangeText={setRatingReview}
               placeholder="Write a brief review..."
-              icon="??"
+              icon="✍️"
             />
 
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
@@ -1412,7 +1414,6 @@ const ClientDashboard = ({ user, onLogout }) => {
             </View>
           </View>
         </View>
-      </Modal>
       </Modal>
     </View>
   );
