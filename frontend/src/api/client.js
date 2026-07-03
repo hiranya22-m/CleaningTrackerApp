@@ -478,8 +478,8 @@ export const clientAPI = {
     const res = await apiClient.get('/client/associated-contractors');
     return res.data;
   },
-  rateContractor: async (contractorId, rating, review) => {
-    const res = await apiClient.post(`/client/contractors/${contractorId}/rate`, { rating, review });
+  rateContractor: async (contractorId, rating, review, contractId) => {
+    const res = await apiClient.post(`/client/contractors/${contractorId}/rate`, { rating, review, contractId });
     return res.data;
   }
 };

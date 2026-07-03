@@ -342,7 +342,7 @@ const ClientDashboard = ({ user, onLogout }) => {
           <View style={{ marginTop: 15 }}>
             {associatedContractors.map(c => (
               <TouchableOpacity
-                key={c._id}
+                key={c.contractId}
                 style={[styles.jobCard, { flexDirection: 'row', alignItems: 'center' }]}
                 activeOpacity={0.7}
                 onPress={() => {
@@ -358,7 +358,7 @@ const ClientDashboard = ({ user, onLogout }) => {
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.jobTitle, { fontSize: 16 }]}>{c.companyName || c.name}</Text>
                   <Text style={styles.jobDetailText}>📞 {c.phoneNumber}</Text>
-                  <Text style={styles.jobDetailText}>⭐ {c.averageRating ? c.averageRating.toFixed(1) : 'No Ratings'}</Text>
+                  <Text style={styles.jobDetailText}>📅 {new Date(c.jobDate).toLocaleDateString()}</Text>
                 </View>
                 <Text style={{ color: Colors.primary, fontWeight: 'bold' }}>Rate ➔</Text>
               </TouchableOpacity>
@@ -513,7 +513,12 @@ const ClientDashboard = ({ user, onLogout }) => {
     if (!selectedContractorToRate) return;
     try {
       setSubmittingRating(true);
-      const res = await clientAPI.rateContractor(selectedContractorToRate._id, ratingValue, ratingReview);
+      const res = await clientAPI.rateContractor(
+        selectedContractorToRate._id, 
+        ratingValue, 
+        ratingReview, 
+        selectedContractorToRate.contractId
+      );
       if (res.success) {
         Alert.alert('Success 🎉', 'Rating submitted successfully');
         setRatingModalVisible(false);

@@ -63,6 +63,10 @@ const UserSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
+    contractId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Contract'
+    },
     rating: {
       type: Number,
       min: 1,
