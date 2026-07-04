@@ -661,7 +661,7 @@ exports.getContractorProjectsForWorker = async (req, res) => {
         return {
           _id: a._id,
           contractId: c._id,
-          status: c.status,
+          status: a.workerStatus === 'Completed' ? 'completed' : c.status,
           customerName: c.clientName,
           address: c.location?.address,
           startTime: c.schedule?.date,

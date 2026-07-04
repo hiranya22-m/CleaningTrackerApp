@@ -149,6 +149,9 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       loadData();
+      if (selectedContractor) {
+        fetchContractorProjects(selectedContractor._id);
+      }
     });
     
     loadData();
@@ -993,10 +996,10 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
                 {contractorDetailTab === 'ongoing' && (
                 <View style={{ marginBottom: 20 }}>
                   <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>⏰ Ongoing Projects ({
-                    jobs.filter(j => j.contractor && (j.contractor._id || j.contractor).toString() === selectedContractor._id.toString() && j.status !== 'completed').length
+                    contractorProjects.filter(j => j.status !== 'completed').length
                   })</Text>
                   {(() => {
-                    const ongoingJobs = jobs.filter(j => j.contractor && (j.contractor._id || j.contractor).toString() === selectedContractor._id.toString() && j.status !== 'completed');
+                    const ongoingJobs = contractorProjects.filter(j => j.status !== 'completed');
                     if (ongoingJobs.length === 0) {
                       return <Text style={{ color: '#64748B', fontSize: 12, paddingLeft: 8 }}>No ongoing projects today.</Text>;
                     }
@@ -1071,10 +1074,10 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
                 {contractorDetailTab === 'completed' && (
                 <View style={{ marginBottom: 20 }}>
                   <Text style={[styles.sectionTitle, { fontSize: 16, marginBottom: 12, color: Colors.primary, fontWeight: '800' }]}>📁 Covered Projects ({
-                    jobs.filter(j => j.contractor && (j.contractor._id || j.contractor).toString() === selectedContractor._id.toString() && j.status === 'completed').length
+                    contractorProjects.filter(j => j.status === 'completed').length
                   })</Text>
                   {(() => {
-                    const completedJobsList = jobs.filter(j => j.contractor && (j.contractor._id || j.contractor).toString() === selectedContractor._id.toString() && j.status === 'completed');
+                    const completedJobsList = contractorProjects.filter(j => j.status === 'completed');
                     if (completedJobsList.length === 0) {
                       return <Text style={{ color: '#64748B', fontSize: 12, paddingLeft: 8 }}>No covered projects found.</Text>;
                     }

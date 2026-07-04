@@ -546,7 +546,7 @@ exports.getWorkerRosterProfile = async (req, res) => {
         return {
           _id: a._id,
           contractId: c._id,
-          status: c.status,
+          status: a.workerStatus === 'Completed' ? 'completed' : c.status,
           workerStatus: a.workerStatus,
           customerName: c.clientName,
           address: c.location?.address,
