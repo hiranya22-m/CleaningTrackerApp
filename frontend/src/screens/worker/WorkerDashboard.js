@@ -147,6 +147,10 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
   };
 
   useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadData();
+    });
+    
     loadData();
 
     // 1-second interval to force timer redraws and dynamic expiration check
@@ -183,6 +187,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
     });
 
     return () => {
+      unsubscribe();
       clearInterval(timerInterval);
       socket.disconnect();
     };
