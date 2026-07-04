@@ -10,6 +10,7 @@ import backScrollEmitter from '../../utils/backScrollEmitter';
 
 const WorkerDashboard = ({ user, onLogout, navigation }) => {
   const [activeTab, _setActiveTab] = useState('home'); // 'home', 'freelance', 'profile'
+  const [showEditProfile, setShowEditProfile] = useState(false);
   const [tabHistory, setTabHistory] = useState(['home']);
 
   const setActiveTab = (tab) => {
@@ -302,12 +303,18 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
   };
 
   const renderProfileTab = () => {
-    return (
-      <View style={{ paddingBottom: 30 }}>
-        <Text style={styles.sectionTitle}>My Profile 👤</Text>
-        <Text style={styles.sectionSubtitle}>Manage and update your crew member details.</Text>
-        
-        <View style={[styles.formCard, { marginTop: 15 }]}>
+    if (showEditProfile) {
+      return (
+        <View style={{ paddingBottom: 30 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
+            <TouchableOpacity onPress={() => setShowEditProfile(false)} style={{ padding: 10, marginLeft: -10 }}>
+              <Text style={{ fontSize: 16, color: Colors.primary, fontWeight: '700' }}>⬅ Back</Text>
+            </TouchableOpacity>
+            <Text style={[styles.sectionTitle, { marginBottom: 0, marginLeft: 10 }]}>Edit Details</Text>
+          </View>
+          <Text style={styles.sectionSubtitle}>Manage and update your crew member details.</Text>
+          
+          <View style={[styles.formCard, { marginTop: 15 }]}>
           <CustomInput
             label="Full Name"
             value={profileName}
@@ -402,8 +409,222 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
           </View>
         </View>
       </View>
+      );
+    }
+
+    return (
+      <View style={{ paddingBottom: 30 }}>
+        {/* Profile Header */}
+        <TouchableOpacity 
+          style={{ flexDirection: 'row', alignItems: 'center', padding: 20, backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 20, elevation: 2, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 8 }}
+          activeOpacity={0.7}
+          onPress={() => setShowEditProfile(true)}
+        >
+          <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: Colors.primary + '15', justifyContent: 'center', alignItems: 'center', marginRight: 16 }}>
+            <Text style={{ fontSize: 32 }}>👤</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: '#1E293B', marginBottom: 4 }}>{profileName || profileUser?.name || 'Crew Member'}</Text>
+            <Text style={{ fontSize: 13, color: Colors.primary, fontWeight: '600' }}>View / Edit Details ➔</Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Options List */}
+        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 8 }}>
+          
+          {/* Activity Section */}
+          <View style={styles.profileSectionHeader}>
+            <Text style={styles.profileSectionHeaderText}>Activity</Text>
+          </View>
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>⭐</Text>
+            <Text style={styles.profileOptionText}>Reviews & Ratings</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>📋</Text>
+            <Text style={styles.profileOptionText}>My Reviews and My Ratings</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+
+          {/* Help & Support Section */}
+          <View style={styles.profileSectionHeader}>
+            <Text style={styles.profileSectionHeaderText}>❓ Help & Support</Text>
+          </View>
+          <TouchableOpacity style={styles.profileOptionBtn} onPress={() => _setActiveTab('help')}>
+            <Text style={styles.profileOptionIcon}>🎧</Text>
+            <Text style={styles.profileOptionText}>Help Center</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>✉️</Text>
+            <Text style={styles.profileOptionText}>Contact Support</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>💬</Text>
+            <Text style={styles.profileOptionText}>FAQ</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>⚠️</Text>
+            <Text style={styles.profileOptionText}>Report a Problem</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+
+          {/* About Section */}
+          <View style={styles.profileSectionHeader}>
+            <Text style={styles.profileSectionHeaderText}>ℹ️ About</Text>
+          </View>
+          <TouchableOpacity style={styles.profileOptionBtn} onPress={() => _setActiveTab('about')}>
+            <Text style={styles.profileOptionIcon}>🏢</Text>
+            <Text style={styles.profileOptionText}>About CrewLynk</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>🔒</Text>
+            <Text style={styles.profileOptionText}>Privacy Policy</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>📄</Text>
+            <Text style={styles.profileOptionText}>Terms & Conditions</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>📱</Text>
+            <Text style={styles.profileOptionText}>App Version</Text>
+            <Text style={[styles.profileOptionArrow, { fontSize: 14 }]}>v1.0.0</Text>
+          </TouchableOpacity>
+
+          <View style={[styles.profileOptionDivider, { marginLeft: 0 }]} />
+          <TouchableOpacity style={styles.profileOptionBtn} onPress={onLogout}>
+            <Text style={styles.profileOptionIcon}>🚪</Text>
+            <Text style={[styles.profileOptionText, { color: '#EF4444' }]}>Log Out</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
     );
   };
+
+  const renderHelpAndSupport = () => (
+    <View style={styles.fullScreenContainer}>
+      <View style={styles.pageHeader}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => _setActiveTab('profile')}>
+          <Text style={styles.backBtnText}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.pageHeaderTitle}>Help & Support</Text>
+        <View style={{ width: 24 }} />
+      </View>
+      <ScrollView contentContainerStyle={{ padding: 20 }}>
+        <View style={styles.emptyStateContainer}>
+          <Text style={styles.emptyStateText}>You have no past transactions{'\n'}to show here</Text>
+          <Text style={styles.emptyStateIcon}>📄</Text>
+        </View>
+
+        <Text style={styles.topicsHeader}>Other topics</Text>
+        
+        <TouchableOpacity style={styles.topicBtn}>
+          <Text style={styles.topicIcon}>⚙️</Text>
+          <Text style={styles.topicText}>Account and payment options</Text>
+          <Text style={styles.topicArrow}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.topicDivider} />
+        
+        <TouchableOpacity style={styles.topicBtn}>
+          <Text style={styles.topicIcon}>📱</Text>
+          <Text style={styles.topicText}>App Issues</Text>
+          <Text style={styles.topicArrow}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.topicDivider} />
+        
+        <TouchableOpacity style={styles.topicBtn}>
+          <Text style={styles.topicIcon}>🧹</Text>
+          <Text style={styles.topicText}>Using CrewLynk Jobs</Text>
+          <Text style={styles.topicArrow}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.topicDivider} />
+        
+        <TouchableOpacity style={styles.topicBtn}>
+          <Text style={styles.topicIcon}>🛍️</Text>
+          <Text style={styles.topicText}>Using CrewLynk Services</Text>
+          <Text style={styles.topicArrow}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.topicDivider} />
+      </ScrollView>
+    </View>
+  );
+
+  const renderAboutUs = () => (
+    <View style={styles.fullScreenContainer}>
+      <View style={styles.pageHeader}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => _setActiveTab('profile')}>
+          <Text style={styles.backBtnText}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.pageHeaderTitle}>About Us</Text>
+        <View style={{ width: 24 }} />
+      </View>
+      <ScrollView contentContainerStyle={{ padding: 20 }}>
+        <Text style={styles.aboutLogo}>CrewLynk</Text>
+        <Text style={styles.aboutDesc}>
+          CrewLynk is a premier service connection app that connects clients and contractors via GPS in real time. CrewLynk assures Convenience, Reliability and Safety and was born of the need to reduce (if not eliminate) the daily service-finding hassles faced by the client as well as the contractor.
+        </Text>
+        
+        <Text style={styles.aboutSectionTitle}>CrewLynk HQ</Text>
+        <Text style={styles.aboutAddress}>
+          No 309 High Level Road{'\n'}Colombo 06.
+        </Text>
+        
+        <View style={styles.aboutContactRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.aboutSectionTitle}>Support - Worker</Text>
+            <Text style={styles.aboutLink}>0117433433</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.aboutSectionTitle}>Hotline</Text>
+            <Text style={styles.aboutLink}>1331</Text>
+          </View>
+        </View>
+
+        <Text style={styles.aboutSectionTitle}>Website</Text>
+        <Text style={styles.aboutLink}>https://crewlynk.com</Text>
+
+        <Text style={styles.aboutFeedback}>
+          Your feedback is important to us in order to make CrewLynk better for you. Report any bugs, improvements and your suggestions regarding CrewLynk so we can serve you even better.
+        </Text>
+
+        <View style={styles.topicDivider} />
+
+        <TouchableOpacity style={styles.topicBtn}>
+          <Text style={[styles.topicText, { marginLeft: 0 }]}>Legal</Text>
+          <Text style={styles.topicArrow}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.topicDivider} />
+
+        <TouchableOpacity style={styles.topicBtn}>
+          <Text style={[styles.topicText, { marginLeft: 0 }]}>Privacy Policy</Text>
+          <Text style={styles.topicArrow}>›</Text>
+        </TouchableOpacity>
+        <View style={styles.topicDivider} />
+
+        <View style={styles.followUsRow}>
+          <Text style={[styles.topicText, { marginLeft: 0 }]}>Follow Us</Text>
+          <Text style={{ fontSize: 24, marginLeft: 16 }}>📘</Text>
+          <Text style={{ fontSize: 24, marginLeft: 8 }}>𝕏</Text>
+        </View>
+
+        <Text style={styles.appVersion}>App version 9.40060 - 864</Text>
+      </ScrollView>
+    </View>
+  );
 
   const scrollRef = useRef(null);
   useEffect(() => {
@@ -1094,6 +1315,8 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
         )}
 
         {activeTab === 'profile' && renderProfileTab()}
+        {activeTab === 'help' && renderHelpAndSupport()}
+        {activeTab === 'about' && renderAboutUs()}
 
         <AppFooter />
       </ScrollView>
@@ -1212,6 +1435,163 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  fullScreenContainer: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 40,
+    paddingBottom: 20,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  pageHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 40,
+    backgroundColor: '#F0FDF4',
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  emptyStateIcon: {
+    fontSize: 80,
+    opacity: 0.3,
+  },
+  topicsHeader: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  topicBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  topicIcon: {
+    fontSize: 20,
+    marginRight: 12,
+  },
+  topicText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1E293B',
+    fontWeight: '600',
+  },
+  topicArrow: {
+    fontSize: 18,
+    color: '#94A3B8',
+  },
+  topicDivider: {
+    height: 1,
+    backgroundColor: '#E2E8F0',
+  },
+  aboutLogo: {
+    fontSize: 32,
+    fontWeight: '900',
+    color: '#1E293B',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  aboutDesc: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  aboutSectionTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1E293B',
+    marginBottom: 4,
+  },
+  aboutAddress: {
+    fontSize: 14,
+    color: '#475569',
+    marginBottom: 20,
+  },
+  aboutContactRow: {
+    flexDirection: 'row',
+    marginBottom: 20,
+  },
+  aboutLink: {
+    fontSize: 14,
+    color: '#3B82F6',
+  },
+  aboutFeedback: {
+    fontSize: 14,
+    color: '#475569',
+    lineHeight: 22,
+    marginVertical: 20,
+  },
+  followUsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  appVersion: {
+    textAlign: 'center',
+    color: '#94A3B8',
+    fontSize: 12,
+    marginTop: 40,
+    marginBottom: 20,
+  },
+  profileSectionHeader: {
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  profileSectionHeaderText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#475569',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  profileOptionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    backgroundColor: '#FFFFFF',
+  },
+  profileOptionIcon: {
+    fontSize: 22,
+    marginRight: 16,
+  },
+  profileOptionText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#1E293B',
+    fontWeight: '500',
+  },
+  profileOptionArrow: {
+    fontSize: 20,
+    color: '#94A3B8',
+  },
+  profileOptionDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginLeft: 58,
+  },
   topTabBar: {
     flexDirection: 'row',
     marginBottom: 20,
