@@ -321,6 +321,10 @@ export const contractorAPI = {
     const res = await apiClient.get('/contractor/packages');
     return res.data;
   },
+  reassignWorker: async (assignmentId, workerId) => {
+    const res = await apiClient.post(`/contractor/reassign-worker/${assignmentId}`, { workerId });
+    return res.data;
+  },
   searchWorkers: async (query = '') => {
     const res = await apiClient.get(`/contractor/workers/search?query=${query}`);
     return res.data;

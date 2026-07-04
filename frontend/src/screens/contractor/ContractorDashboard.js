@@ -1353,7 +1353,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
       } else if (notif.type === 'offer_accepted' || (notif.data && notif.data.contractId)) {
         setBidsSubTab('accepted');
         navigateToTab('clientRequests');
-      } else if (notif.type === 'contract_accepted') {
+      } else if (notif.type === 'contract_accepted' || notif.type === 'contract_now_active') {
         navigateToTab('projects');
       } else if (notif.type === 'freelance_applied' || notif.type === 'freelance_accepted') {
         navigateToTab('freelance');
@@ -1367,14 +1367,14 @@ const ContractorDashboard = ({ user, onLogout }) => {
     if (!selectedAssignmentForReassign) return;
     setReassigningWorker(true);
     try {
-      const res = await api.post(`/contractor/reassign-worker/${selectedAssignmentForReassign}`, { workerId });
-      if (res.data.success) {
+      const res = await contractorAPI.reassignWorker(selectedAssignmentForReassign, workerId);
+      if (res.success) {
         Alert.alert('Success 🎉', 'Worker reassigned successfully.');
         setShowReassignModal(false);
         setSelectedAssignmentForReassign(null);
         fetchDashboardData();
       } else {
-        Alert.alert('Error', res.data.message || 'Failed to reassign worker');
+        Alert.alert('Error', res.message || 'Failed to reassign worker');
       }
     } catch (error) {
       Alert.alert('Error', error.response?.data?.message || 'Something went wrong');
@@ -2150,7 +2150,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
               return (
                 <View>
                   <View style={styles.profileGpsCard}>
-                    <Text style={styles.profileGpsTitle}>🛰️ Live Telemetry ({selectedRosterWorker.name})</Text>
+                    <Text style={styles.profileGpsTitle}>🛰️ Live Telemetry ({activeContract.clientName})</Text>
                     <View style={styles.profileGpsGrid}>
                       <View style={styles.profileGpsCol}>
                         <Text style={styles.profileGpsLabel}>Status</Text>
@@ -2672,7 +2672,12 @@ const ContractorDashboard = ({ user, onLogout }) => {
                                     <Text style={styles.noWorkersText}>No crew members found on your roster. Please add workers first.</Text>
                                   ) : (
                                     <View style={styles.crewChecklist}>
-                                      {rosterWorkers.map(worker => {
+                                      {rosterWorkers.filter(worker => {
+                                        return !assignmentsList.some(a => {
+                                          const aId = typeof a.workerId === 'object' ? a.workerId._id : a.workerId;
+                                          return aId.toString() === worker._id.toString() && ['rejected', 'expired'].includes(a.response);
+                                        });
+                                      }).map(worker => {
                                         const isAssigned = assignmentsList.some(a => {
                                           const aId = typeof a.workerId === 'object' ? a.workerId._id : a.workerId;
                                           return aId.toString() === worker._id.toString() && ['pending', 'accepted'].includes(a.response);
