@@ -127,6 +127,7 @@ const ClientDashboard = ({ user, onLogout }) => {
   const [profilePhone, setProfilePhone] = useState(user?.phoneNumber || '');
   const [profileState, setProfileState] = useState(user?.state || '');
   const [updatingProfile, setUpdatingProfile] = useState(false);
+  const [showEditProfile, setShowEditProfile] = useState(false);
 
   useEffect(() => {
     setProfileUser(user);
@@ -396,85 +397,175 @@ const ClientDashboard = ({ user, onLogout }) => {
   };
 
   const renderProfileTab = () => {
+    if (showEditProfile) {
+      return (
+        <View style={{ paddingBottom: 30 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 15 }}>
+            <TouchableOpacity onPress={() => setShowEditProfile(false)} style={{ padding: 10, marginLeft: -10 }}>
+              <Text style={{ fontSize: 16, color: Colors.primary, fontWeight: '700' }}>⬅ Back</Text>
+            </TouchableOpacity>
+            <Text style={[styles.sectionTitle, { marginBottom: 0, marginLeft: 10 }]}>Edit Details</Text>
+          </View>
+          <Text style={styles.sectionSubtitle}>Manage and update your client account details.</Text>
+          
+          <View style={[styles.formCard, { marginTop: 15 }]}>
+            <CustomInput
+              label="Full Name"
+              value={profileName}
+              onChangeText={setProfileName}
+              placeholder="John Doe"
+              icon="👤"
+              required
+            />
+
+            <CustomInput
+              label="Phone Number"
+              value={profilePhone}
+              onChangeText={setProfilePhone}
+              placeholder="77 123 4567"
+              icon="📞"
+              keyboardType="phone-pad"
+              required
+            />
+
+            <View style={{ zIndex: 5 }}>
+              <CustomInput
+                label="State / Region / Location"
+                value={profileState}
+                onChangeText={handleProfileStateSearch}
+                placeholder="Search city or location..."
+                icon="📍"
+              />
+              {profileStateSuggestions.length > 0 && (
+                <View style={[styles.suggestionsBox, { top: -10, position: 'relative' }]}>
+                  {profileStateSuggestions.map((item, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.suggestionItem}
+                      onPress={() => {
+                        setProfileState(item.display_name);
+                        setProfileStateSuggestions([]);
+                      }}
+                    >
+                      <Text style={styles.suggestionText} numberOfLines={1}>
+                        📍 {item.display_name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            <View style={{ marginTop: 15 }}>
+              <CustomButton
+                title={updatingProfile ? "Saving Changes..." : "Save Changes"}
+                type="primary"
+                onPress={handleUpdateProfile}
+                disabled={updatingProfile}
+              />
+            </View>
+          </View>
+        </View>
+      );
+    }
+
     return (
       <View style={{ paddingBottom: 30 }}>
-        <Text style={styles.sectionTitle}>My Profile 👤</Text>
-        <Text style={styles.sectionSubtitle}>Manage and update your client account details.</Text>
-        
-        <View style={[styles.formCard, { marginTop: 15 }]}>
-          <CustomInput
-            label="Full Name"
-            value={profileName}
-            onChangeText={setProfileName}
-            placeholder="John Doe"
-            icon="👤"
-            required
-          />
-
-          <CustomInput
-            label="Phone Number"
-            value={profilePhone}
-            onChangeText={setProfilePhone}
-            placeholder="77 123 4567"
-            icon="📞"
-            keyboardType="phone-pad"
-            required
-          />
-
-          <View style={{ zIndex: 5 }}>
-            <CustomInput
-              label="State / Region / Location"
-              value={profileState}
-              onChangeText={handleProfileStateSearch}
-              placeholder="Search city or location..."
-              icon="📍"
-            />
-            {profileStateSuggestions.length > 0 && (
-              <View style={[styles.suggestionsBox, { top: -10, position: 'relative' }]}>
-                {profileStateSuggestions.map((item, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.suggestionItem}
-                    onPress={() => {
-                      setProfileState(item.display_name);
-                      setProfileStateSuggestions([]);
-                    }}
-                  >
-                    <Text style={styles.suggestionText} numberOfLines={1}>
-                      📍 {item.display_name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
+        {/* Profile Header */}
+        <TouchableOpacity 
+          style={{ flexDirection: 'row', alignItems: 'center', padding: 20, backgroundColor: '#FFFFFF', borderRadius: 16, marginBottom: 20, elevation: 2, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 8 }}
+          activeOpacity={0.7}
+          onPress={() => setShowEditProfile(true)}
+        >
+          <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: Colors.primary + '15', justifyContent: 'center', alignItems: 'center', marginRight: 16 }}>
+            <Text style={{ fontSize: 32 }}>👤</Text>
           </View>
-
-          <View style={{ marginTop: 15 }}>
-            <CustomButton
-              title={updatingProfile ? "Saving Changes..." : "Save Changes"}
-              type="primary"
-              onPress={handleUpdateProfile}
-              disabled={updatingProfile}
-            />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: '#1E293B', marginBottom: 4 }}>{profileName || user?.name || 'User'}</Text>
+            <Text style={{ fontSize: 13, color: Colors.primary, fontWeight: '600' }}>View / Edit Details ➔</Text>
           </View>
+        </TouchableOpacity>
 
-          <View style={{ marginTop: 15 }}>
-            <TouchableOpacity 
-              style={{
-                backgroundColor: '#FCA5A5',
-                paddingVertical: 12,
-                borderRadius: 12,
-                justifyContent: 'center',
-                alignItems: 'center',
-                borderWidth: 1.2,
-                borderColor: '#EF4444'
-              }} 
-              onPress={onLogout} 
-              activeOpacity={0.7}
-            >
-              <Text style={{ color: '#7F1D1D', fontWeight: '800', fontSize: 14 }}>Logout ➔</Text>
-            </TouchableOpacity>
+        {/* Options List */}
+        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, overflow: 'hidden', elevation: 2, shadowColor: '#000', shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.05, shadowRadius: 8 }}>
+          
+          {/* Activity Section */}
+          <View style={styles.profileSectionHeader}>
+            <Text style={styles.profileSectionHeaderText}>Activity</Text>
           </View>
+          <TouchableOpacity style={styles.profileOptionBtn} onPress={() => setActiveTab('contractors')}>
+            <Text style={styles.profileOptionIcon}>⭐</Text>
+            <Text style={styles.profileOptionText}>Reviews & Ratings</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>📋</Text>
+            <Text style={styles.profileOptionText}>My Reviews and My Ratings</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+
+          {/* Help & Support Section */}
+          <View style={styles.profileSectionHeader}>
+            <Text style={styles.profileSectionHeaderText}>❓ Help & Support</Text>
+          </View>
+          <TouchableOpacity style={styles.profileOptionBtn} onPress={() => Alert.alert('Help Center', 'Coming soon.')}>
+            <Text style={styles.profileOptionIcon}>🎧</Text>
+            <Text style={styles.profileOptionText}>Help Center</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>✉️</Text>
+            <Text style={styles.profileOptionText}>Contact Support</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>💬</Text>
+            <Text style={styles.profileOptionText}>FAQ</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>⚠️</Text>
+            <Text style={styles.profileOptionText}>Report a Problem</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+
+          {/* About Section */}
+          <View style={styles.profileSectionHeader}>
+            <Text style={styles.profileSectionHeaderText}>ℹ️ About</Text>
+          </View>
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>🏢</Text>
+            <Text style={styles.profileOptionText}>About CrewLynk</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>🔒</Text>
+            <Text style={styles.profileOptionText}>Privacy Policy</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>📄</Text>
+            <Text style={styles.profileOptionText}>Terms & Conditions</Text>
+            <Text style={styles.profileOptionArrow}>›</Text>
+          </TouchableOpacity>
+          <View style={styles.profileOptionDivider} />
+          <TouchableOpacity style={styles.profileOptionBtn}>
+            <Text style={styles.profileOptionIcon}>📱</Text>
+            <Text style={styles.profileOptionText}>App Version</Text>
+            <Text style={[styles.profileOptionArrow, { fontSize: 14 }]}>v1.0.0</Text>
+          </TouchableOpacity>
+
+          <View style={[styles.profileOptionDivider, { marginLeft: 0 }]} />
+          <TouchableOpacity style={styles.profileOptionBtn} onPress={onLogout}>
+            <Text style={styles.profileOptionIcon}>🚪</Text>
+            <Text style={[styles.profileOptionText, { color: '#EF4444' }]}>Log Out</Text>
+          </TouchableOpacity>
         </View>
       </View>
     );
@@ -745,7 +836,7 @@ const ClientDashboard = ({ user, onLogout }) => {
         <TouchableOpacity 
           style={{ position: 'relative', padding: 6 }} 
           activeOpacity={0.7}
-          onPress={() => setShowNotificationsModal(true)}
+          onPress={() => setActiveTab('notifications')}
         >
           <Text style={{ fontSize: 20 }}>🔔</Text>
           {unreadNotificationsCount > 0 && (
@@ -1130,6 +1221,54 @@ const ClientDashboard = ({ user, onLogout }) => {
 
         {/* TAB 5: PROFILE */}
         {activeTab === 'profile' && renderProfileTab()}
+
+        {/* TAB 6: NOTIFICATIONS */}
+        {activeTab === 'notifications' && (
+          <View style={{ paddingBottom: 30 }}>
+            <Text style={styles.sectionTitle}>Notifications 🔔</Text>
+            <Text style={styles.sectionSubtitle}>Your recent alerts and updates.</Text>
+            <View style={{ marginTop: 15 }}>
+              {loadingNotifications ? (
+                <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
+              ) : notifications.length === 0 ? (
+                <Text style={{ textAlign: 'center', color: '#64748B', fontSize: 14, marginVertical: 20 }}>
+                  No notifications yet.
+                </Text>
+              ) : (
+                notifications.map(notif => (
+                  <TouchableOpacity
+                    key={notif._id}
+                    style={{
+                      padding: 16,
+                      backgroundColor: notif.read ? '#FFFFFF' : 'rgba(16, 185, 129, 0.05)',
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderColor: notif.read ? '#E2E8F0' : 'rgba(16, 185, 129, 0.3)',
+                      marginBottom: 10,
+                      elevation: 1
+                    }}
+                    onPress={() => handleNotificationClick(notif)}
+                  >
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <Text style={{ fontWeight: '800', color: Colors.secondary, fontSize: 15 }}>
+                        {notif.title}
+                      </Text>
+                      {!notif.read && (
+                        <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#EF4444' }} />
+                      )}
+                    </View>
+                    <Text style={{ fontSize: 14, color: '#475569', marginBottom: 8, lineHeight: 20 }}>
+                      {notif.message}
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#94A3B8', alignSelf: 'flex-end', fontWeight: '600' }}>
+                      {new Date(notif.createdAt).toLocaleString()}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+          </View>
+        )}
       <AppFooter />
         </ScrollView>
 
@@ -1143,7 +1282,7 @@ const ClientDashboard = ({ user, onLogout }) => {
           pointerEvents="auto"
         >
           <Text style={[styles.tabIcon, activeTab === 'home' && styles.tabIconActive]}>🏠</Text>
-          <Text style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}>Browse</Text>
+          <Text style={[styles.tabLabel, activeTab === 'home' && styles.tabLabelActive]}>Home</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -1168,16 +1307,7 @@ const ClientDashboard = ({ user, onLogout }) => {
           <Text style={[styles.tabLabel, activeTab === 'inbox' && styles.tabLabelActive]}>Inbox</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'contractors' && styles.tabItemActive]}
-          onPress={() => setActiveTab('contractors')}
-          activeOpacity={0.7}
-          hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-          pointerEvents="auto"
-        >
-          <Text style={[styles.tabIcon, activeTab === 'contractors' && styles.tabIconActive]}>👷</Text>
-          <Text style={[styles.tabLabel, activeTab === 'contractors' && styles.tabLabelActive]}>Contractors</Text>
-        </TouchableOpacity>
+
 
         <TouchableOpacity
           style={[styles.tabItem, activeTab === 'profile' && styles.tabItemActive]}
@@ -1187,7 +1317,7 @@ const ClientDashboard = ({ user, onLogout }) => {
           pointerEvents="auto"
         >
           <Text style={[styles.tabIcon, activeTab === 'profile' && styles.tabIconActive]}>👤</Text>
-          <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}>Profile</Text>
+          <Text style={[styles.tabLabel, activeTab === 'profile' && styles.tabLabelActive]}>Account</Text>
         </TouchableOpacity>
       </View>
 
@@ -1284,78 +1414,7 @@ const ClientDashboard = ({ user, onLogout }) => {
         </View>
       </Modal>
 
-      {/* Custom Notifications Modal */}
-      <Modal
-        visible={showNotificationsModal}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowNotificationsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.calendarContainer}>
-            <View style={styles.calendarHeader}>
-              <Text style={styles.calendarMonthTitle}>🔔 Notifications</Text>
-              <TouchableOpacity 
-                onPress={() => setShowNotificationsModal(false)}
-                style={styles.calendarNavBtn}
-              >
-                <Text style={styles.calendarNavBtnText}>✕</Text>
-              </TouchableOpacity>
-            </View>
 
-            <ScrollView 
-              style={{ maxHeight: 350, marginVertical: 10, width: '100%' }}
-              showsVerticalScrollIndicator={false}
-            >
-              {loadingNotifications ? (
-                <ActivityIndicator size="small" color={Colors.primary} style={{ marginVertical: 20 }} />
-              ) : notifications.length === 0 ? (
-                <Text style={{ textAlign: 'center', color: '#64748B', fontSize: 13, marginVertical: 20 }}>
-                  No notifications yet.
-                </Text>
-              ) : (
-                notifications.map(notif => (
-                  <TouchableOpacity
-                    key={notif._id}
-                    style={{
-                      padding: 12,
-                      backgroundColor: notif.read ? '#FFFFFF' : 'rgba(16, 185, 129, 0.05)',
-                      borderRadius: 10,
-                      borderWidth: 1,
-                      borderColor: notif.read ? '#E2E8F0' : 'rgba(16, 185, 129, 0.2)',
-                      marginBottom: 8
-                    }}
-                    onPress={() => handleNotificationClick(notif)}
-                  >
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                      <Text style={{ fontWeight: '800', color: Colors.secondary, fontSize: 13 }}>
-                        {notif.title}
-                      </Text>
-                      {!notif.read && (
-                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#EF4444' }} />
-                      )}
-                    </View>
-                    <Text style={{ fontSize: 12, color: '#475569', marginBottom: 6 }}>
-                      {notif.message}
-                    </Text>
-                    <Text style={{ fontSize: 9.5, color: '#94A3B8', alignSelf: 'flex-end' }}>
-                      {new Date(notif.createdAt).toLocaleString()}
-                    </Text>
-                  </TouchableOpacity>
-                ))
-              )}
-            <AppFooter />
-        </ScrollView>
-
-            <TouchableOpacity 
-              style={styles.calendarCloseBtn}
-              onPress={() => setShowNotificationsModal(false)}
-            >
-              <Text style={styles.calendarCloseBtnText}>Close</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       {/* Rate Contractor Modal */}
       <Modal
@@ -1425,6 +1484,47 @@ const ClientDashboard = ({ user, onLogout }) => {
 };
 
 const styles = StyleSheet.create({
+  profileOptionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#FFFFFF',
+  },
+  profileOptionIcon: {
+    fontSize: 20,
+    marginRight: 16,
+    width: 24,
+    textAlign: 'center',
+  },
+  profileOptionText: {
+    flex: 1,
+    fontSize: 16,
+    color: '#334155',
+    fontWeight: '600',
+  },
+  profileOptionArrow: {
+    fontSize: 20,
+    color: '#94A3B8',
+  },
+  profileOptionDivider: {
+    height: 1,
+    backgroundColor: '#F1F5F9',
+    marginLeft: 56, // Align with text
+  },
+  profileSectionHeader: {
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  profileSectionHeaderText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#64748B',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC'

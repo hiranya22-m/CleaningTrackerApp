@@ -73,6 +73,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
   const [contractors, setContractors] = useState([]);
   const [loadingContractors, setLoadingContractors] = useState(false);
   const [selectedContractor, setSelectedContractor] = useState(null);
+  const [contractorDetailTab, setContractorDetailTab] = useState('requests'); // 'requests', 'ongoing', 'completed', 'paysheet'
   const [contractorProjects, setContractorProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(false);
 
@@ -679,7 +680,40 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
                   </TouchableOpacity>
                 </View>
 
+                {/* Top Tabs Navigation */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.topTabBar}>
+                  <TouchableOpacity
+                    style={[styles.topTabItem, contractorDetailTab === 'requests' && styles.topTabItemActive]}
+                    onPress={() => setContractorDetailTab('requests')}
+                  >
+                    <Text style={[styles.topTabText, contractorDetailTab === 'requests' && styles.topTabTextActive]}>Approve / Reject</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.topTabItem, contractorDetailTab === 'ongoing' && styles.topTabItemActive]}
+                    onPress={() => setContractorDetailTab('ongoing')}
+                  >
+                    <Text style={[styles.topTabText, contractorDetailTab === 'ongoing' && styles.topTabTextActive]}>Ongoing</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.topTabItem, contractorDetailTab === 'completed' && styles.topTabItemActive]}
+                    onPress={() => setContractorDetailTab('completed')}
+                  >
+                    <Text style={[styles.topTabText, contractorDetailTab === 'completed' && styles.topTabTextActive]}>Covered Project</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.topTabItem, contractorDetailTab === 'paysheet' && styles.topTabItemActive]}
+                    onPress={() => setContractorDetailTab('paysheet')}
+                  >
+                    <Text style={[styles.topTabText, contractorDetailTab === 'paysheet' && styles.topTabTextActive]}>Paysheet</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+
                 {/* 1. Projects requests to approve */}
+                {contractorDetailTab === 'requests' && (
+
                 <View style={{ marginBottom: 20 }}>
                   <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>📥 Project Requests to Approve ({
                     assignments.filter(a => a.response === 'pending' && a.contractId && a.contractId.contractorId && (a.contractId.contractorId._id || a.contractId.contractorId).toString() === selectedContractor._id.toString()).length
@@ -725,11 +759,13 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
                       );
                     });
                   })()}
+                  })()}
                 </View>
+                )}
 
-                <View style={styles.divider} />
 
                 {/* 2. Ongoing projects */}
+                {contractorDetailTab === 'ongoing' && (
                 <View style={{ marginBottom: 20 }}>
                   <Text style={[styles.sectionTitle, { fontSize: 14, marginBottom: 8 }]}>⏰ Ongoing Projects ({
                     jobs.filter(j => j.contractor && (j.contractor._id || j.contractor).toString() === selectedContractor._id.toString() && j.status !== 'completed').length
@@ -802,11 +838,13 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
                       );
                     });
                   })()}
+                  })()}
                 </View>
+                )}
 
-                <View style={styles.divider} />
 
                 {/* 3. Covered Projects (Separated) */}
+                {contractorDetailTab === 'completed' && (
                 <View style={{ marginBottom: 20 }}>
                   <Text style={[styles.sectionTitle, { fontSize: 16, marginBottom: 12, color: Colors.primary, fontWeight: '800' }]}>📁 Covered Projects ({
                     jobs.filter(j => j.contractor && (j.contractor._id || j.contractor).toString() === selectedContractor._id.toString() && j.status === 'completed').length
@@ -838,11 +876,13 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
                       );
                     });
                   })()}
+                  })()}
                 </View>
+                )}
 
-                <View style={styles.divider} />
 
                 {/* 4. Automated Paysheet */}
+                {contractorDetailTab === 'paysheet' && (
                 <View style={{ zIndex: 10, marginTop: 15 }}>
                   <Text style={[styles.sectionTitle, { fontSize: 16, marginBottom: 12, color: Colors.primary, fontWeight: '800' }]}>📊 Automated Paysheet</Text>
                   <Text style={styles.automatedLabel}>⚠️ Payouts are computed automatically based on verified clock-in durations and GPS logs.</Text>
@@ -949,6 +989,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
                     </View>
                   )}
                 </View>
+                )}
               </View>
             ) : (
               // Main Home View
@@ -1171,6 +1212,31 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
 };
 
 const styles = StyleSheet.create({
+  topTabBar: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  topTabItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginRight: 10,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  topTabItemActive: {
+    borderBottomColor: '#F59E0B', // Orange from the screenshot
+  },
+  topTabText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  topTabTextActive: {
+    color: '#1E293B',
+    fontWeight: '800',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC'

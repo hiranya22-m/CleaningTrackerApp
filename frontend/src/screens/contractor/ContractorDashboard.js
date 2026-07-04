@@ -172,6 +172,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
   const [searchWorkerEmail, setSearchWorkerEmail] = useState('');
   const [foundWorkerList, setFoundWorkerList] = useState([]);
   const [selectedRosterWorker, setSelectedRosterWorker] = useState(null);
+  const [workerDetailTab, setWorkerDetailTab] = useState('ongoing'); // 'ongoing', 'completed', 'paysheet'
   const [workerProfileStats, setWorkerProfileStats] = useState(null);
   const [workerProfilePeriod, setWorkerProfilePeriod] = useState('week'); // 'week', 'month', '3months'
   const [workerProfileJobs, setWorkerProfileJobs] = useState([]);
@@ -1778,7 +1779,32 @@ const ContractorDashboard = ({ user, onLogout }) => {
             <Text style={styles.assignJobBtnText}>➕ Assign Job to Crew Member</Text>
           </TouchableOpacity>
 
+          {/* Top Tabs Navigation */}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.topTabBar}>
+            <TouchableOpacity
+              style={[styles.topTabItem, workerDetailTab === 'ongoing' && styles.topTabItemActive]}
+              onPress={() => setWorkerDetailTab('ongoing')}
+            >
+              <Text style={[styles.topTabText, workerDetailTab === 'ongoing' && styles.topTabTextActive]}>Ongoing</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.topTabItem, workerDetailTab === 'completed' && styles.topTabItemActive]}
+              onPress={() => setWorkerDetailTab('completed')}
+            >
+              <Text style={[styles.topTabText, workerDetailTab === 'completed' && styles.topTabTextActive]}>Covered Project</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.topTabItem, workerDetailTab === 'paysheet' && styles.topTabItemActive]}
+              onPress={() => setWorkerDetailTab('paysheet')}
+            >
+              <Text style={[styles.topTabText, workerDetailTab === 'paysheet' && styles.topTabTextActive]}>Paysheet</Text>
+            </TouchableOpacity>
+          </ScrollView>
+
           {/* Ongoing Projects Section */}
+          {workerDetailTab === 'ongoing' && (
           <View style={[styles.profileSection, { marginBottom: 20 }]}>
             <Text style={[styles.profileSectionTitle, { fontSize: 16, marginBottom: 12, color: Colors.primary, fontWeight: '800' }]}>📁 Ongoing Projects ({workerOngoingProjects.length})</Text>
             {workerOngoingProjects.length === 0 ? (
@@ -1886,8 +1912,10 @@ const ContractorDashboard = ({ user, onLogout }) => {
               );
             })()}
           </View>
+          )}
 
           {/* Covered Projects Section */}
+          {workerDetailTab === 'completed' && (
           <View style={[styles.profileSection, { marginBottom: 20 }]}>
             <Text style={[styles.profileSectionTitle, { fontSize: 16, marginBottom: 12, color: Colors.primary, fontWeight: '800' }]}>📁 Covered Projects ({completedJobs.length})</Text>
             {completedJobs.length === 0 ? (
@@ -1916,8 +1944,10 @@ const ContractorDashboard = ({ user, onLogout }) => {
               })
             )}
           </View>
+          )}
 
           {/* Automated Paysheet Section */}
+          {workerDetailTab === 'paysheet' && (
           <View style={[styles.profileSection, { zIndex: 10 }]}>
             <Text style={styles.profileSectionTitle}>Automated Paysheet (App Calculated):</Text>
             <Text style={styles.automatedLabel}>⚠️ Payouts are computed automatically based on verified clock-in durations and GPS logs. Overrides or manual calculations by the contractor are disabled.</Text>
@@ -2010,6 +2040,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
               </View>
             )}
           </View>
+          )}
 
           <TouchableOpacity
             style={styles.backBtn}
@@ -4156,6 +4187,31 @@ const ContractorDashboard = ({ user, onLogout }) => {
 };
 
 const styles = StyleSheet.create({
+  topTabBar: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+  },
+  topTabItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginRight: 10,
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  topTabItemActive: {
+    borderBottomColor: '#F59E0B',
+  },
+  topTabText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  topTabTextActive: {
+    color: '#1E293B',
+    fontWeight: '800',
+  },
   container: {
     flex: 1,
     backgroundColor: '#F8FAFC'
