@@ -2705,7 +2705,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
                                                 {worker.name} {isAssigned && '(Already Assigned)'}
                                               </Text>
                                               <Text style={styles.checklistWorkerStatus}>
-                                                Status: {worker.status || 'available'}
+                                                Status: {(worker.status === 'available' || worker.status === 'active' || !worker.status) ? 'Available' : 'Busy'}
                                               </Text>
                                             </View>
                                           </TouchableOpacity>
@@ -3824,7 +3824,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
                                     {worker.name}
                                   </Text>
                                   <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
-                                    {worker.status || 'Available'}
+                                    {(worker.status === 'available' || worker.status === 'active' || !worker.status) ? 'Available' : 'Busy'}
                                   </Text>
                                 </View>
                               </View>
