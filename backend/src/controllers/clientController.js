@@ -247,6 +247,7 @@ exports.rateContractor = async (req, res) => {
  * @access  Private/Client
  */
 exports.getAssociatedContractors = async (req, res) => {
+  try {
     const Contract = require('../models/Contract');
     // Find contracts for this client that are completed
     const contracts = await Contract.find({ clientId: req.user.id, status: 'completed' })
