@@ -1653,24 +1653,6 @@ const ContractorDashboard = ({ user, onLogout }) => {
             <Text style={styles.profileOptionText}>Help Center</Text>
             <Text style={styles.profileOptionArrow}>›</Text>
           </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>✉️</Text>
-            <Text style={styles.profileOptionText}>Contact Support</Text>
-            <Text style={styles.profileOptionArrow}>›</Text>
-          </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>💬</Text>
-            <Text style={styles.profileOptionText}>FAQ</Text>
-            <Text style={styles.profileOptionArrow}>›</Text>
-          </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>⚠️</Text>
-            <Text style={styles.profileOptionText}>Report a Problem</Text>
-            <Text style={styles.profileOptionArrow}>›</Text>
-          </TouchableOpacity>
 
           {/* About Section */}
           <View style={styles.profileSectionHeader}>
@@ -1681,24 +1663,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
             <Text style={styles.profileOptionText}>About CrewLynk</Text>
             <Text style={styles.profileOptionArrow}>›</Text>
           </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>🔒</Text>
-            <Text style={styles.profileOptionText}>Privacy Policy</Text>
-            <Text style={styles.profileOptionArrow}>›</Text>
-          </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>📄</Text>
-            <Text style={styles.profileOptionText}>Terms & Conditions</Text>
-            <Text style={styles.profileOptionArrow}>›</Text>
-          </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>📱</Text>
-            <Text style={styles.profileOptionText}>App Version</Text>
-            <Text style={[styles.profileOptionArrow, { fontSize: 14 }]}>v1.0.0</Text>
-          </TouchableOpacity>
+
 
           <View style={[styles.profileOptionDivider, { marginLeft: 0 }]} />
           <TouchableOpacity style={styles.profileOptionBtn} onPress={onLogout}>
@@ -2646,10 +2611,15 @@ const ContractorDashboard = ({ user, onLogout }) => {
                                       else if (a.response === 'rejected' || a.response === 'expired') { statusDisplay = '❌ Rejected'; statusColor = '#EF4444'; }
                                       
                                       return (
-                                        <View key={wId || idx} style={[styles.assignedCrewItem, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}>
-                                          <Text style={styles.assignedCrewText}>👤 {workerObj ? workerObj.name : 'Unknown Crew'}</Text>
+                                        <TouchableOpacity 
+                                          key={wId || idx} 
+                                          style={[styles.assignedCrewItem, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }]}
+                                          onPress={() => setSelectedAssignmentForReassign(a._id)}
+                                          activeOpacity={0.7}
+                                        >
+                                          <Text style={styles.assignedCrewText}>👤 {workerObj ? workerObj.name : 'Unknown Crew'} ✏️</Text>
                                           <Text style={{ fontSize: 13, fontWeight: '700', color: statusColor }}>{statusDisplay}</Text>
-                                        </View>
+                                        </TouchableOpacity>
                                       );
                                     })}
                                   </View>

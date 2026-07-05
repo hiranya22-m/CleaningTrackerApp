@@ -514,24 +514,6 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
             <Text style={styles.profileOptionText}>Help Center</Text>
             <Text style={styles.profileOptionArrow}>›</Text>
           </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>✉️</Text>
-            <Text style={styles.profileOptionText}>Contact Support</Text>
-            <Text style={styles.profileOptionArrow}>›</Text>
-          </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>💬</Text>
-            <Text style={styles.profileOptionText}>FAQ</Text>
-            <Text style={styles.profileOptionArrow}>›</Text>
-          </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>⚠️</Text>
-            <Text style={styles.profileOptionText}>Report a Problem</Text>
-            <Text style={styles.profileOptionArrow}>›</Text>
-          </TouchableOpacity>
 
           {/* About Section */}
           <View style={styles.profileSectionHeader}>
@@ -542,24 +524,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
             <Text style={styles.profileOptionText}>About CrewLynk</Text>
             <Text style={styles.profileOptionArrow}>›</Text>
           </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>🔒</Text>
-            <Text style={styles.profileOptionText}>Privacy Policy</Text>
-            <Text style={styles.profileOptionArrow}>›</Text>
-          </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>📄</Text>
-            <Text style={styles.profileOptionText}>Terms & Conditions</Text>
-            <Text style={styles.profileOptionArrow}>›</Text>
-          </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>📱</Text>
-            <Text style={styles.profileOptionText}>App Version</Text>
-            <Text style={[styles.profileOptionArrow, { fontSize: 14 }]}>v1.0.0</Text>
-          </TouchableOpacity>
+
 
           <View style={[styles.profileOptionDivider, { marginLeft: 0 }]} />
           <TouchableOpacity style={styles.profileOptionBtn} onPress={onLogout}>

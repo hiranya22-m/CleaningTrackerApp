@@ -1114,8 +1114,9 @@ exports.reassignWorker = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Assignment not found' });
     }
 
-    if (!['rejected', 'expired'].includes(oldAssignment.response)) {
-      return res.status(400).json({ success: false, message: 'Only rejected or expired assignments can be reassigned' });
+    // Allowed reassigning any assignment including accepted ones
+    if (!['pending', 'accepted', 'rejected', 'expired'].includes(oldAssignment.response)) {
+      return res.status(400).json({ success: false, message: 'Invalid assignment state for reassignment' });
     }
 
     const contract = await Contract.findById(oldAssignment.contractId);
