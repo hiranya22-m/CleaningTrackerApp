@@ -2654,12 +2654,14 @@ const ContractorDashboard = ({ user, onLogout }) => {
                                     })}
                                   </View>
                                   
-                                  {hasRejections && !showChecklist && (
+                                  {!showChecklist && (
                                     <TouchableOpacity 
-                                      style={{ marginTop: 10, alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: '#FEF2F2', borderRadius: 8, borderWidth: 1, borderColor: '#FECACA' }}
+                                      style={{ marginTop: 10, alignSelf: 'flex-start', paddingVertical: 6, paddingHorizontal: 12, backgroundColor: hasRejections ? '#FEF2F2' : '#F0F9FF', borderRadius: 8, borderWidth: 1, borderColor: hasRejections ? '#FECACA' : '#BAE6FD' }}
                                       onPress={() => setReassignContractId(c._id)}
                                     >
-                                      <Text style={{ color: '#EF4444', fontWeight: '700', fontSize: 13 }}>+ Re-assign another crew member</Text>
+                                      <Text style={{ color: hasRejections ? '#EF4444' : Colors.primary, fontWeight: '700', fontSize: 13 }}>
+                                        {hasRejections ? '+ Re-assign rejected crew member' : '+ Assign additional crew member'}
+                                      </Text>
                                     </TouchableOpacity>
                                   )}
                                   <View style={styles.divider} />
@@ -2957,7 +2959,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
                 onPress={() => setExpandedFreelanceId(expandedFreelanceId === job._id ? null : job._id)}
               >
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.freelanceCategoryText}>🛠️ {job.category} ({job.hours} hrs @ ${job.pricePerHour}/hr)</Text>
+                  <Text style={styles.freelanceCategoryText}>🛠️ {job.category} ({formatDuration(job.hours * 60)} @ ${job.pricePerHour}/hr)</Text>
                   <Text style={styles.freelanceDateText}>📅 Date: {new Date(job.date).toLocaleDateString()} at {job.time}</Text>
                   <Text style={styles.freelanceDateText}>📍 Location: {job.location}</Text>
                 </View>
@@ -3846,8 +3848,8 @@ const ContractorDashboard = ({ user, onLogout }) => {
                             return (
                               <Text style={{ color: '#64748B', fontSize: 13, marginTop: 8, fontStyle: 'italic' }}>
                                 {selectedRosterWorker 
-                                  ? 'This worker is currently busy and cannot be assigned right now.' 
-                                  : 'All your roster workers are currently busy.'}
+                                  ? 'This worker is currently busy at this time and cannot be assigned.' 
+                                  : 'All your roster workers are currently busy at this time.'}
                               </Text>
                             );
                           }
@@ -3873,7 +3875,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
                                     {worker.name}
                                   </Text>
                                   <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>
-                                    {(worker.status === 'available' || worker.status === 'active' || !worker.status) ? 'Available' : 'Busy'}
+                                    {worker.hasClash ? 'Busy' : 'Available'}
                                   </Text>
                                 </View>
                               </View>

@@ -1341,7 +1341,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
                       </View>
                     </View>
                     <Text style={styles.freelanceDateText}>📅 Date: {new Date(job.date).toLocaleDateString()} at {job.time}</Text>
-                    <Text style={styles.freelanceDateText}>⏱️ Duration: {job.hours} hours (Est. Payout: ${job.hours * job.pricePerHour})</Text>
+                    <Text style={styles.freelanceDateText}>⏱️ Duration: {formatDuration(job.hours * 60)} (Est. Payout: ${job.hours * job.pricePerHour})</Text>
                     <Text style={styles.freelanceDateText}>📍 Location: {job.location}</Text>
                     <View style={styles.divider} />
                     <Text style={styles.freelanceDescText}>Description: {job.description}</Text>

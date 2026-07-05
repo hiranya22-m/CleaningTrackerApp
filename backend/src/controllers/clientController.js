@@ -249,8 +249,8 @@ exports.rateContractor = async (req, res) => {
 exports.getAssociatedContractors = async (req, res) => {
   try {
     const Contract = require('../models/Contract');
-    // Find contracts for this client that are completed
-    const contracts = await Contract.find({ clientId: req.user.id, status: 'completed' })
+    // Find contracts for this client that are active or completed
+    const contracts = await Contract.find({ clientId: req.user.id, status: { $in: ['active', 'completed'] } })
       .populate('contractorId', 'name companyName email phoneNumber tags locations averageRating ratings');
 
     const associatedProjects = contracts.map(contract => {
