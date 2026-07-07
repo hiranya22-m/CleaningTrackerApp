@@ -1034,7 +1034,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
       }
     } catch (e) {
       setLoading(false);
-      Alert.alert('Error', e.response?.data?.message || 'Server error occurred during dispatch');
+      Alert.alert('Error', e.response?.data?.message || e.message || 'Server error occurred during dispatch');
     }
   };
 
