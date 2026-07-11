@@ -15,16 +15,13 @@
         "ACCESS_COARSE_LOCATION",
         "ACCESS_FINE_LOCATION"
       ],
-      "package": "com.mhabey.cleaningtracker"
+      "package": "com.nethmihiranya.cleaningtracker"
     },
     "web": {
       "backgroundColor": "#0F172A"
     },
     "extra": {
-      "apiUrl": "https://cleaningtrackerapp-production.up.railway.app",
-      "eas": {
-        "projectId": "10546914-f55d-4db9-880c-ae2edfcc888d"
-      }
+      "apiUrl": "https://cleaningtrackerapp-production.up.railway.app"
     },
     "plugins": [
       [
@@ -35,7 +32,6 @@
           }
         }
       ]
-    ],
-    "owner": "abeywi"
+    ]
   }
 }
