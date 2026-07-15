@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Modal, TextInput, Alert, useWindowDimensions } from 'react-native';
-import backScrollEmitter from '../utils/backScrollEmitter';
+
 import { User, HardHat, Briefcase } from 'lucide-react-native';
 import { Colors } from '../theme/colors';
 import AppFooter from '../components/AppFooter';
@@ -23,8 +23,7 @@ const WelcomeScreen = ({ navigation }) => {
         }
       } catch (e) {}
     };
-    const unsub = backScrollEmitter.subscribe(listener);
-    return () => unsub();
+    
   }, []);
 
   const handleSaveConfig = async () => {

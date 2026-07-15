@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal } from 'react-native';
-import backScrollEmitter from '../../utils/backScrollEmitter';
+
 import { Colors } from '../../theme/colors';
 import CustomInput from '../../components/CustomInput';
 import CustomButton from '../../components/CustomButton';
@@ -31,8 +31,7 @@ const AssignJobScreen = ({ onJobCreated }) => {
         }
       } catch (e) {}
     };
-    const unsub = backScrollEmitter.subscribe(listener);
-    return () => unsub();
+    
   }, []);
   
   const [workers, setWorkers] = useState([]);

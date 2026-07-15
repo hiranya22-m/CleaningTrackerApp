@@ -14,7 +14,7 @@ import {
   BackHandler,
   RefreshControl
 } from 'react-native';
-import backScrollEmitter from '../utils/backScrollEmitter';
+
 import { Colors } from '../theme/colors';
 import { authAPI, CURRENT_BASE_URL } from '../api/client';
 import AppFooter from '../components/AppFooter';
@@ -133,10 +133,7 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
   // Handle hardware back press (Android)
   useEffect(() => {
     const backAction = () => {
-      let handled = false;
-      const markHandled = () => { handled = true; };
-      backScrollEmitter.requestScrollToTop(markHandled);
-      if (handled) return true;
+      
 
       if (isOtpRole && otpStep === 2) {
         setOtpStep(1);
@@ -161,8 +158,7 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
         }
       } catch (e) {}
     };
-    const unsub = backScrollEmitter.subscribe(listener);
-    return () => unsub();
+    
   }, []);
 
   // Resend cooldown
@@ -331,19 +327,7 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
         }
       >
-        <TouchableOpacity
-          style={styles.backLink}
-          onPress={() => {
-            if (isOtpRole && otpStep === 2) {
-              setOtpStep(1);
-              setOtpCode('');
-            } else {
-              navigation.goBack();
-            }
-          }}
-        >
-          <Text style={styles.backLinkText}>← Back</Text>
-        </TouchableOpacity>
+        
 
         <View style={styles.card}>
           {/* Direct Compact Brand Logo Image */}

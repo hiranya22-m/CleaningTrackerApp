@@ -6,7 +6,7 @@ import AppFooter from '../../components/AppFooter';
 import CustomInput from '../../components/CustomInput';
 import CustomButton from '../../components/CustomButton';
 import io from 'socket.io-client';
-import backScrollEmitter from '../../utils/backScrollEmitter';
+
 import { formatDuration } from '../../utils/formatters';
 
 const WorkerDashboard = ({ user, onLogout, navigation }) => {
@@ -646,8 +646,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
         }
       } catch (e) {}
     };
-    const unsub = backScrollEmitter.subscribe(listener);
-    return () => unsub();
+    
   }, []);
 
   const handleRefresh = async () => {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import backScrollEmitter from '../../utils/backScrollEmitter';
+
 import { formatDuration } from '../../utils/formatters';
 import {
   View,
@@ -196,8 +196,7 @@ const ContractorDashboard = ({ user, onLogout }) => {
         // ignore
       }
     };
-    const unsub = backScrollEmitter.subscribe(listener);
-    return () => unsub();
+    
   }, []);
 
   const fadeTransition = (cb) => {

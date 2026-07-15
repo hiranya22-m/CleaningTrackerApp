@@ -3,7 +3,7 @@ import { View, Text, ScrollView, RefreshControl, StyleSheet, Alert, TouchableOpa
 import { Colors } from '../../theme/colors';
 import { adminAPI } from '../../api/client';
 import AppFooter from '../../components/AppFooter';
-import backScrollEmitter from '../../utils/backScrollEmitter';
+
 
 const AdminDashboard = ({ user, onLogout }) => {
   const [activeTab, _setActiveTab] = useState('home'); // 'home', 'contractors', 'workers', 'history'
@@ -97,8 +97,7 @@ const AdminDashboard = ({ user, onLogout }) => {
         }
       } catch (e) {}
     };
-    const unsub = backScrollEmitter.subscribe(listener);
-    return () => unsub();
+    
   }, []);
 
   // View specific worker history

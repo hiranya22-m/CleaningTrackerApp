@@ -21,7 +21,7 @@ import CustomInput from '../../components/CustomInput';
 import CustomButton from '../../components/CustomButton';
 import AppFooter from '../../components/AppFooter';
 import TimeInput from '../../components/TimeInput';
-import backScrollEmitter from '../../utils/backScrollEmitter';
+
 import { formatDuration } from '../../utils/formatters';
 import { State, Country, City } from 'country-state-city';
 import * as Location from 'expo-location';
@@ -664,8 +664,7 @@ const ClientDashboard = ({ user, onLogout }) => {
         }
       } catch (e) {}
     };
-    const unsub = backScrollEmitter.subscribe(listener);
-    return () => unsub();
+    
   }, []);
 
   const loadAssociatedContractors = async () => {

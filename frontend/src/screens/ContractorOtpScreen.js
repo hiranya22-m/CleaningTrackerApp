@@ -226,19 +226,7 @@ const ContractorOtpScreen = ({ onLoginSuccess, navigation }) => {
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
       }>
-        <TouchableOpacity
-          style={styles.backLink}
-          onPress={() => {
-            if (step === 2) {
-              setStep(1);
-              setOtpCode('');
-            } else {
-              navigation.goBack();
-            }
-          }}
-        >
-          <Text style={styles.backLinkText}>← Back</Text>
-        </TouchableOpacity>
+        
 
         <View style={styles.card}>
           {/* Direct Balanced Logo Image */}
