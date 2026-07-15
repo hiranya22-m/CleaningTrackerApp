@@ -279,7 +279,7 @@ const RegisterScreen = ({ navigation, route }) => {
 
         if (Platform.OS === 'web') {
           alert(`Verification Dispatched ✉️\n\n${res.message || `We sent a 6-digit verification code to ${trimmedEmail}.`}`);
-          navigation.navigate('Login', routeParams);
+          navigation.replace('Login', routeParams);
         } else {
           Alert.alert(
             'Verification Dispatched ✉️',
@@ -288,7 +288,7 @@ const RegisterScreen = ({ navigation, route }) => {
               {
                 text: 'Enter Verification Code',
                 onPress: () => {
-                  navigation.navigate('Login', routeParams);
+                  navigation.replace('Login', routeParams);
                 }
               }
             ]
@@ -325,9 +325,7 @@ const RegisterScreen = ({ navigation, route }) => {
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={Colors.primary} />
         }
       >
-        <TouchableOpacity style={styles.backLink} onPress={() => navigation.goBack()}>
-          <Text style={styles.backLinkText}>← Back</Text>
-        </TouchableOpacity>
+        
 
         <View style={styles.card}>
           {/* Direct Balanced Logo Image */}
@@ -796,7 +794,7 @@ const RegisterScreen = ({ navigation, route }) => {
           {(!showLocationSuggestions && !showStateDropdown) && (
             <View style={styles.footerRow}>
               <Text style={styles.footerLabel}>Already have an account? </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('Login', { role: selectedRole })}>
+              <TouchableOpacity onPress={() => navigation.replace('Login', { role: selectedRole })}>
                 <Text style={styles.loginLink}>Sign In</Text>
               </TouchableOpacity>
             </View>

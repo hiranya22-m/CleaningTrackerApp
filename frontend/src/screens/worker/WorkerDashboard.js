@@ -23,6 +23,10 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
   };
 
   const goBack = () => {
+    if (activeTab === 'home' && selectedContractor) {
+      setSelectedContractor(null);
+      return true;
+    }
     if (tabHistory.length > 1) {
       setTabHistory(prev => {
         const history = [...prev];
@@ -42,7 +46,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
       () => goBack()
     );
     return () => backHandler.remove();
-  }, [tabHistory]);
+  }, [tabHistory, activeTab, selectedContractor]);
 
   const [paysheetPeriod, setPaysheetPeriod] = useState('month'); // default to 'month'
   const [showPaysheetPeriodDropdown, setShowPaysheetPeriodDropdown] = useState(false);

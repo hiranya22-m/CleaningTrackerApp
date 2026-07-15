@@ -68,27 +68,31 @@ const ClientDashboard = ({ user, onLogout }) => {
     _setActiveTab(tab);
   };
 
-  const goBack = () => {
-    if (tabHistory.length > 1) {
-      setTabHistory(prev => {
-        const history = [...prev];
-        history.pop();
-        const previousTab = history[history.length - 1] || 'home';
-        _setActiveTab(previousTab);
-        return history;
-      });
-      return true;
-    }
-    return false;
-  };
-
+  // Android Hardware Back Button Handler
   useEffect(() => {
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => goBack()
-    );
+    const onBackPress = () => {
+      if (activeTab === 'network' && selectedContractor) {
+        setSelectedContractor(null);
+        return true;
+      }
+      if (activeTab === 'network' && selectedRosterWorker) {
+        setSelectedRosterWorker(null);
+        return true;
+      }
+      if (activeTab !== 'projects' && tabHistory.length > 1) {
+        setTabHistory(prev => {
+          const hist = [...prev];
+          hist.pop();
+          setActiveTab(hist[hist.length - 1] || 'projects');
+          return hist;
+        });
+        return true;
+      }
+      return false;
+    };
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => backHandler.remove();
-  }, [tabHistory]);
+  }, [activeTab, tabHistory, selectedContractor, selectedRosterWorker]);
 
   // Home states
   const [selectedCategory, setSelectedCategory] = useState(null);

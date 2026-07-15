@@ -28,13 +28,13 @@ const ForgotPasswordScreen = ({ navigation }) => {
       setLoading(false);
       if (Platform.OS === 'web') {
         alert('Recovery Email Dispatched ✉️\n\nIf an account exists with that email address, you will receive password recovery instructions shortly.');
-        navigation.navigate('Login');
+        navigation.replace('Login');
       } else {
         Alert.alert(
           'Recovery Email Dispatched ✉️',
           'If an account exists with that email address, you will receive password recovery instructions shortly.',
           [
-            { text: 'Back to Login', onPress: () => navigation.navigate('Login') }
+            { text: 'Back to Login', onPress: () => navigation.replace('Login') }
           ]
         );
       }
@@ -47,9 +47,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
       style={styles.container}
     >
       <ScrollView contentContainerStyle={styles.scrollContainer} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-        <TouchableOpacity style={styles.backLink} onPress={() => navigation.goBack()}>
-          <Text style={styles.backLinkText}>← Back</Text>
-        </TouchableOpacity>
+        
 
         <View style={styles.card}>
           {/* Direct Balanced Logo Image */}
@@ -85,7 +83,7 @@ const ForgotPasswordScreen = ({ navigation }) => {
 
           <View style={styles.footerRow}>
             <Text style={styles.footerLabel}>Remember your password? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+            <TouchableOpacity onPress={() => navigation.replace('Login')}>
               <Text style={styles.loginLink}>Sign In</Text>
             </TouchableOpacity>
           </View>

@@ -19,8 +19,6 @@ import ContractorDashboard from './src/screens/contractor/ContractorDashboard';
 import ClientDashboard from './src/screens/client/ClientDashboard';
 
 import { setAuthToken, setCurrentUserStore, loadPersistentSession, authAPI, initializeBaseUrl } from './src/api/client';
-import { BackHandler } from 'react-native';
-import backScrollEmitter from './src/utils/backScrollEmitter';
 
 const Stack = createStackNavigator();
 
@@ -71,25 +69,7 @@ export default function App() {
     validateAndRestoreSession();
   }, []);
 
-  // Global hardware back handler: if a screen can scroll up, scroll to top first.
-  useEffect(() => {
-    const onBackPress = () => {
-      let handled = false;
-      const markHandled = () => { handled = true; };
-      backScrollEmitter.requestScrollToTop(markHandled);
 
-      if (handled) return true; // we scrolled to top, prevent navigation
-
-      if (navigationRef.current && navigationRef.current.canGoBack()) {
-        navigationRef.current.goBack();
-        return true;
-      }
-      return false; // allow OS default (exit app)
-    };
-
-    const sub = BackHandler.addEventListener('hardwareBackPress', onBackPress);
-    return () => sub.remove();
-  }, []);
 
   const handleLoginSuccess = async (loggedInUser, userToken) => {
     setToken(userToken);

@@ -407,7 +407,7 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
 
                 <TouchableOpacity
                   style={styles.forgotLinkContainer}
-                  onPress={() => navigation.navigate('ForgotPassword')}
+                  onPress={() => navigation.replace('ForgotPassword')}
                 >
                   <Text style={styles.forgotLink}>Forgot Password?</Text>
                 </TouchableOpacity>
@@ -524,7 +524,7 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
                   style={styles.changeEmailBtn}
                   onPress={() => {
                     if (params && params.registerFlow) {
-                      navigation.navigate('Register', { role: selectedRole });
+                      navigation.replace('Register', { role: selectedRole });
                     } else {
                       fadeTransition(() => { setOtpStep(1); setOtpCode(''); });
                     }
@@ -541,7 +541,7 @@ const LoginScreen = ({ onLoginSuccess, navigation, route }) => {
           {/* Footer links */}
           <View style={styles.footerRow}>
             <Text style={styles.footerLabel}>Don't have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Register', { role: selectedRole })}>
+            <TouchableOpacity onPress={() => navigation.replace('Register', { role: selectedRole })}>
               <Text style={styles.registerLink}>Create Account</Text>
             </TouchableOpacity>
           </View>

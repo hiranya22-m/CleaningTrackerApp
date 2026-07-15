@@ -17,27 +17,23 @@ const AdminDashboard = ({ user, onLogout }) => {
     _setActiveTab(tab);
   };
 
-  const goBack = () => {
-    if (tabHistory.length > 1) {
-      setTabHistory(prev => {
-        const history = [...prev];
-        history.pop();
-        const previousTab = history[history.length - 1] || 'home';
-        _setActiveTab(previousTab);
-        return history;
-      });
-      return true;
-    }
-    return false;
-  };
-
+  // Android Hardware Back Button Handler
   useEffect(() => {
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      () => goBack()
-    );
+    const onBackPress = () => {
+      if (activeTab !== 'users' && tabHistory.length > 1) {
+        setTabHistory(prev => {
+          const hist = [...prev];
+          hist.pop();
+          setActiveTab(hist[hist.length - 1] || 'users');
+          return hist;
+        });
+        return true;
+      }
+      return false;
+    };
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => backHandler.remove();
-  }, [tabHistory]);
+  }, [activeTab, tabHistory]);
   // Real database states
   const [contractors, setContractors] = useState([]);
   const [workers, setWorkers] = useState([]);
