@@ -279,6 +279,7 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
         if (res.user) {
           setProfileUser(res.user);
         }
+        setShowEditProfile(false);
       } else {
         Alert.alert('Error ⚠️', res.message || 'Failed to update profile');
       }
@@ -535,40 +536,54 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
         <View style={{ width: 24 }} />
       </View>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <View style={styles.emptyStateContainer}>
-          <Text style={styles.emptyStateText}>You have no past transactions{'\n'}to show here</Text>
-          <Text style={styles.emptyStateIcon}>📄</Text>
+        <View style={{ backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, marginBottom: 20, elevation: 2 }}>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.secondary, marginBottom: 8 }}>🎧 Crew Support Center</Text>
+          <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 20, marginBottom: 16 }}>
+            Need help with shift clock-ins, contract assignment acceptance, or payout calculations? Contact our crew support team anytime.
+          </Text>
+
+          <View style={{ gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10 }}>
+              <Text style={{ fontSize: 24, marginRight: 12 }}>📞</Text>
+              <View>
+                <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '600' }}>Crew Support Hotline</Text>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.primary }}>1331 / +1 (800) 555-CREW</Text>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10 }}>
+              <Text style={{ fontSize: 24, marginRight: 12 }}>✉️</Text>
+              <View>
+                <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '600' }}>Crew Support Email</Text>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.primary }}>crewsupport@crewlynk.com</Text>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10 }}>
+              <Text style={{ fontSize: 24, marginRight: 12 }}>⏱️</Text>
+              <View>
+                <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '600' }}>Operating Hours</Text>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#10B981' }}>24/7 Live Shift Support</Text>
+              </View>
+            </View>
+          </View>
         </View>
 
-        <Text style={styles.topicsHeader}>Other topics</Text>
-        
-        <TouchableOpacity style={styles.topicBtn}>
-          <Text style={styles.topicIcon}>⚙️</Text>
-          <Text style={styles.topicText}>Account and payment options</Text>
-          <Text style={styles.topicArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.topicDivider} />
-        
-        <TouchableOpacity style={styles.topicBtn}>
-          <Text style={styles.topicIcon}>📱</Text>
-          <Text style={styles.topicText}>App Issues</Text>
-          <Text style={styles.topicArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.topicDivider} />
-        
-        <TouchableOpacity style={styles.topicBtn}>
-          <Text style={styles.topicIcon}>🧹</Text>
-          <Text style={styles.topicText}>Using CrewLynk Jobs</Text>
-          <Text style={styles.topicArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.topicDivider} />
-        
-        <TouchableOpacity style={styles.topicBtn}>
-          <Text style={styles.topicIcon}>🛍️</Text>
-          <Text style={styles.topicText}>Using CrewLynk Services</Text>
-          <Text style={styles.topicArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.topicDivider} />
+        <Text style={{ fontSize: 16, fontWeight: '800', color: Colors.secondary, marginBottom: 12 }}>Crew FAQs</Text>
+
+        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 10, elevation: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.secondary, marginBottom: 4 }}>How do shift clock-ins work?</Text>
+          <Text style={{ fontSize: 12, color: '#64748B', lineHeight: 18 }}>
+            Clock in on your main station before starting a job. You can start job tracking up to 30 minutes prior to scheduled start time.
+          </Text>
+        </View>
+
+        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 10, elevation: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.secondary, marginBottom: 4 }}>How are automated payouts computed?</Text>
+          <Text style={{ fontSize: 12, color: '#64748B', lineHeight: 18 }}>
+            Payouts are automatically computed multiplying verified worked hours by your hourly rate.
+          </Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -1396,6 +1411,76 @@ const WorkerDashboard = ({ user, onLogout, navigation }) => {
         </TouchableOpacity>
       </View>
 
+      {/* Crew Member Edit Profile Modal */}
+      <Modal
+        visible={showEditProfile}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEditProfile(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, maxHeight: '85%' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.secondary }}>✏️ Edit Crew Profile</Text>
+              <TouchableOpacity onPress={() => setShowEditProfile(false)} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 18, color: '#64748B', fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>Full Name</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, padding: 12, fontSize: 14, color: '#0F172A', marginBottom: 12 }}
+                value={profileName}
+                onChangeText={setProfileName}
+                placeholder="Enter full name"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>Phone Number</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, padding: 12, fontSize: 14, color: '#0F172A', marginBottom: 12 }}
+                value={profilePhone}
+                onChangeText={setProfilePhone}
+                keyboardType="phone-pad"
+                placeholder="Enter phone number"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>Hourly Rate ($/hr)</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, padding: 12, fontSize: 14, color: '#0F172A', marginBottom: 12 }}
+                value={profileHourlyRate}
+                onChangeText={setProfileHourlyRate}
+                keyboardType="numeric"
+                placeholder="e.g. 25"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>Registered State / City</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, padding: 12, fontSize: 14, color: '#0F172A', marginBottom: 16 }}
+                value={profileState}
+                onChangeText={setProfileState}
+                placeholder="e.g. New York, United States"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <TouchableOpacity
+                style={[{ backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }, updatingProfile && { opacity: 0.7 }]}
+                disabled={updatingProfile}
+                onPress={handleUpdateProfile}
+              >
+                {updatingProfile ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>Save Profile Changes</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };

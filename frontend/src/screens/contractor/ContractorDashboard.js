@@ -78,15 +78,58 @@ const getCurrentTime24 = () => {
 };
 
 const ContractorDashboard = ({ user, onLogout }) => {
-  const [profileUser, setProfileUser] = useState(user);
-
-  // Profile editing states
+  const [showEditProfile, setShowEditProfile] = useState(false);
   const [profileName, setProfileName] = useState(user?.name || '');
   const [profilePhone, setProfilePhone] = useState(user?.phoneNumber || '');
   const [profileCompanyName, setProfileCompanyName] = useState(user?.companyName || '');
   const [profileLocations, setProfileLocations] = useState(user?.locations?.join(', ') || '');
   const [profileTags, setProfileTags] = useState(user?.tags?.join(', ') || '');
   const [updatingProfile, setUpdatingProfile] = useState(false);
+
+  useEffect(() => {
+    if (profileUser) {
+      setProfileName(profileUser.name || '');
+      setProfilePhone(profileUser.phoneNumber || '');
+      setProfileCompanyName(profileUser.companyName || '');
+      setProfileLocations(profileUser.locations?.join(', ') || '');
+      setProfileTags(profileUser.tags?.join(', ') || '');
+    }
+  }, [profileUser]);
+
+  const handleUpdateContractorProfile = async () => {
+    if (!profileName.trim()) {
+      Alert.alert('Error ⚠️', 'Name is required');
+      return;
+    }
+    if (!profilePhone.trim()) {
+      Alert.alert('Error ⚠️', 'Phone number is required');
+      return;
+    }
+
+    try {
+      setUpdatingProfile(true);
+      const res = await authAPI.updateProfile({
+        name: profileName.trim(),
+        phoneNumber: profilePhone.trim(),
+        companyName: profileCompanyName.trim(),
+        locations: profileLocations ? profileLocations.split(',').map(s => s.trim()).filter(Boolean) : [],
+        tags: profileTags ? profileTags.split(',').map(s => s.trim()).filter(Boolean) : []
+      });
+      if (res.success) {
+        Alert.alert('Success 🎉', 'Contractor profile updated successfully!');
+        if (res.user) {
+          setProfileUser(res.user);
+        }
+        setShowEditProfile(false);
+      } else {
+        Alert.alert('Error ⚠️', res.message || 'Failed to update profile');
+      }
+    } catch (error) {
+      Alert.alert('Error ⚠️', error.message || 'Failed to update profile');
+    } finally {
+      setUpdatingProfile(false);
+    }
+  };
 
   // --- Notifications States ---
   const [notifications, setNotifications] = useState([]);
@@ -1672,40 +1715,54 @@ const ContractorDashboard = ({ user, onLogout }) => {
         <View style={{ width: 24 }} />
       </View>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <View style={styles.emptyStateContainer}>
-          <Text style={styles.emptyStateText}>You have no past transactions{'\n'}to show here</Text>
-          <Text style={styles.emptyStateIcon}>📄</Text>
+        <View style={{ backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, marginBottom: 20, elevation: 2 }}>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.secondary, marginBottom: 8 }}>🎧 CrewLynk Support Desk</Text>
+          <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 20, marginBottom: 16 }}>
+            Our 24/7 dedicated support team is available to assist contractors with site dispatches, crew assignments, billing, and GPS tracking issues.
+          </Text>
+
+          <View style={{ gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10 }}>
+              <Text style={{ fontSize: 24, marginRight: 12 }}>📞</Text>
+              <View>
+                <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '600' }}>Direct Hotline</Text>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.primary }}>1331 / +1 (800) 555-CREW</Text>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10 }}>
+              <Text style={{ fontSize: 24, marginRight: 12 }}>✉️</Text>
+              <View>
+                <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '600' }}>Email Support</Text>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.primary }}>support@crewlynk.com</Text>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10 }}>
+              <Text style={{ fontSize: 24, marginRight: 12 }}>⚡</Text>
+              <View>
+                <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '600' }}>Service Status</Text>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#10B981' }}>All Dispatch Systems Operational</Text>
+              </View>
+            </View>
+          </View>
         </View>
 
-        <Text style={styles.topicsHeader}>Other topics</Text>
+        <Text style={{ fontSize: 16, fontWeight: '800', color: Colors.secondary, marginBottom: 12 }}>Frequently Asked Questions</Text>
         
-        <TouchableOpacity style={styles.topicBtn}>
-          <Text style={styles.topicIcon}>⚙️</Text>
-          <Text style={styles.topicText}>Account and payment options</Text>
-          <Text style={styles.topicArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.topicDivider} />
-        
-        <TouchableOpacity style={styles.topicBtn}>
-          <Text style={styles.topicIcon}>📱</Text>
-          <Text style={styles.topicText}>App Issues</Text>
-          <Text style={styles.topicArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.topicDivider} />
-        
-        <TouchableOpacity style={styles.topicBtn}>
-          <Text style={styles.topicIcon}>🧹</Text>
-          <Text style={styles.topicText}>Using CrewLynk Jobs</Text>
-          <Text style={styles.topicArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.topicDivider} />
-        
-        <TouchableOpacity style={styles.topicBtn}>
-          <Text style={styles.topicIcon}>🛍️</Text>
-          <Text style={styles.topicText}>Using CrewLynk Services</Text>
-          <Text style={styles.topicArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.topicDivider} />
+        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 10, elevation: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.secondary, marginBottom: 4 }}>How do crew member limits work?</Text>
+          <Text style={{ fontSize: 12, color: '#64748B', lineHeight: 18 }}>
+            Basic packages allow up to 5 active crew members. Upgrade to Premium for unlimited crew assignments.
+          </Text>
+        </View>
+
+        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 10, elevation: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.secondary, marginBottom: 4 }}>How is live GPS tracking enabled?</Text>
+          <Text style={{ fontSize: 12, color: '#64748B', lineHeight: 18 }}>
+            GPS tracking turns on automatically when a crew member accepts and starts an active contract.
+          </Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -4390,6 +4447,83 @@ const ContractorDashboard = ({ user, onLogout }) => {
                   </TouchableOpacity>
                 ));
               })()}
+            </ScrollView>
+          </View>
+        </View>
+      {/* Contractor Edit Profile Modal */}
+      <Modal
+        visible={showEditProfile}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEditProfile(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '85%' }]}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, width: '100%' }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.secondary }}>✏️ Edit Contractor Profile</Text>
+              <TouchableOpacity onPress={() => setShowEditProfile(false)} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 18, color: '#64748B', fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>Full Name</Text>
+              <TextInput
+                style={[styles.addCrewInput, { marginBottom: 12 }]}
+                value={profileName}
+                onChangeText={setProfileName}
+                placeholder="Enter full name"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>Phone Number</Text>
+              <TextInput
+                style={[styles.addCrewInput, { marginBottom: 12 }]}
+                value={profilePhone}
+                onChangeText={setProfilePhone}
+                keyboardType="phone-pad"
+                placeholder="Enter phone number"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>Company Name</Text>
+              <TextInput
+                style={[styles.addCrewInput, { marginBottom: 12 }]}
+                value={profileCompanyName}
+                onChangeText={setProfileCompanyName}
+                placeholder="Enter company name"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>Operating Locations (comma separated)</Text>
+              <TextInput
+                style={[styles.addCrewInput, { marginBottom: 12 }]}
+                value={profileLocations}
+                onChangeText={setProfileLocations}
+                placeholder="e.g. New York, Brooklyn, Queens"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>Capabilities / Services (comma separated)</Text>
+              <TextInput
+                style={[styles.addCrewInput, { marginBottom: 16 }]}
+                value={profileTags}
+                onChangeText={setProfileTags}
+                placeholder="e.g. Cleaning, Plumbing, Electrical"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <TouchableOpacity
+                style={[styles.confirmAssignBtn, updatingProfile && { opacity: 0.7 }]}
+                disabled={updatingProfile}
+                onPress={handleUpdateContractorProfile}
+              >
+                {updatingProfile ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.confirmAssignBtnText}>Save Profile Changes</Text>
+                )}
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </View>

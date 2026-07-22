@@ -122,9 +122,8 @@ const ClientDashboard = ({ user, onLogout }) => {
   const [profileUser, setProfileUser] = useState(user);
   const [profileName, setProfileName] = useState(user?.name || '');
   const [profilePhone, setProfilePhone] = useState(user?.phoneNumber || '');
-  const [profileState, setProfileState] = useState(user?.state || '');
-  const [updatingProfile, setUpdatingProfile] = useState(false);
   const [showEditProfile, setShowEditProfile] = useState(false);
+  const [updatingProfile, setUpdatingProfile] = useState(false);
 
   useEffect(() => {
     setProfileUser(user);
@@ -134,15 +133,42 @@ const ClientDashboard = ({ user, onLogout }) => {
     if (profileUser) {
       setProfileName(profileUser.name || '');
       setProfilePhone(profileUser.phoneNumber || '');
-      setProfileState(profileUser.state || '');
     }
   }, [profileUser]);
 
-  // --- Notifications States ---
-  const [notifications, setNotifications] = useState([]);
+  const handleUpdateClientProfile = async () => {
+    if (!profileName.trim()) {
+      Alert.alert('Error ⚠️', 'Name is required');
+      return;
+    }
+    if (!profilePhone.trim()) {
+      Alert.alert('Error ⚠️', 'Phone number is required');
+      return;
+    }
+    try {
+      setUpdatingProfile(true);
+      const res = await authAPI.updateProfile({
+        name: profileName.trim(),
+        phoneNumber: profilePhone.trim()
+      });
+      if (res.success) {
+        Alert.alert('Success 🎉', 'Profile updated successfully!');
+        if (res.user) setProfileUser(res.user);
+        setShowEditProfile(false);
+      } else {
+        Alert.alert('Error ⚠️', res.message || 'Failed to update profile');
+      }
+    } catch (error) {
+      Alert.alert('Error ⚠️', error.message || 'Failed to update profile');
+    } finally {
+      setUpdatingProfile(false);
+    }
+  };
+
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([]);
   const [socket, setSocket] = useState(null);
 
   const fetchNotifications = async () => {
@@ -174,33 +200,9 @@ const ClientDashboard = ({ user, onLogout }) => {
   };
 
   useEffect(() => {
-    fetchNotifications();
-  }, []);
-
-  useEffect(() => {
-    if (!user || !user.id) return;
-
-    const newSocket = io(getBaseUrl(), {
-      transports: ['websocket']
-    });
-    setSocket(newSocket);
-
-    newSocket.on(`client_notification:${user.id}`, ({ message }) => {
-      Alert.alert(
-        'Notification 🔔',
-        message
-      );
-      fetchNotifications();
-    });
-
-    return () => newSocket.disconnect();
-  }, [user?.id]);
-
-  useEffect(() => {
     if (activeTab === 'postJob') {
       (async () => {
         try {
-          let { status } = await Location.requestForegroundPermissionsAsync();
           if (status !== 'granted') return;
           let loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
           setMapLat(loc.coords.latitude);
@@ -493,15 +495,9 @@ const ClientDashboard = ({ user, onLogout }) => {
           <View style={styles.profileSectionHeader}>
             <Text style={styles.profileSectionHeaderText}>Activity</Text>
           </View>
-          <TouchableOpacity style={styles.profileOptionBtn} onPress={() => setActiveTab('contractors')}>
-            <Text style={styles.profileOptionIcon}>⭐</Text>
-            <Text style={styles.profileOptionText}>Reviews & Ratings</Text>
-            <Text style={styles.profileOptionArrow}>›</Text>
-          </TouchableOpacity>
-          <View style={styles.profileOptionDivider} />
-          <TouchableOpacity style={styles.profileOptionBtn}>
-            <Text style={styles.profileOptionIcon}>📋</Text>
-            <Text style={styles.profileOptionText}>My Reviews and My Ratings</Text>
+          <TouchableOpacity style={styles.profileOptionBtn} onPress={() => setActiveTab('inbox')}>
+            <Text style={styles.profileOptionIcon}>📥</Text>
+            <Text style={styles.profileOptionText}>Service Requests & Bids</Text>
             <Text style={styles.profileOptionArrow}>›</Text>
           </TouchableOpacity>
 
@@ -514,6 +510,7 @@ const ClientDashboard = ({ user, onLogout }) => {
             <Text style={styles.profileOptionText}>Help Center</Text>
             <Text style={styles.profileOptionArrow}>›</Text>
           </TouchableOpacity>
+
           {/* About Section */}
           <View style={styles.profileSectionHeader}>
             <Text style={styles.profileSectionHeaderText}>ℹ️ About</Text>
@@ -544,40 +541,54 @@ const ClientDashboard = ({ user, onLogout }) => {
         <View style={{ width: 24 }} />
       </View>
       <ScrollView contentContainerStyle={{ padding: 20 }}>
-        <View style={styles.emptyStateContainer}>
-          <Text style={styles.emptyStateText}>You have no past transactions{'\n'}to show here</Text>
-          <Text style={styles.emptyStateIcon}>📄</Text>
+        <View style={{ backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, marginBottom: 20, elevation: 2 }}>
+          <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.secondary, marginBottom: 8 }}>🎧 Client Partner Support</Text>
+          <Text style={{ fontSize: 13, color: '#64748B', lineHeight: 20, marginBottom: 16 }}>
+            Need assistance with booking a contractor, reviewing price bids, or tracking job completion? We are here 24/7.
+          </Text>
+
+          <View style={{ gap: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10 }}>
+              <Text style={{ fontSize: 24, marginRight: 12 }}>📞</Text>
+              <View>
+                <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '600' }}>Hotline</Text>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.primary }}>1331 / +1 (800) 555-CREW</Text>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10 }}>
+              <Text style={{ fontSize: 24, marginRight: 12 }}>✉️</Text>
+              <View>
+                <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '600' }}>Client Support Email</Text>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: Colors.primary }}>clienthelp@crewlynk.com</Text>
+              </View>
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 10 }}>
+              <Text style={{ fontSize: 24, marginRight: 12 }}>🛡️</Text>
+              <View>
+                <Text style={{ fontSize: 12, color: '#64748B', fontWeight: '600' }}>Service Guarantee</Text>
+                <Text style={{ fontSize: 15, fontWeight: '800', color: '#10B981' }}>Verified & Rated Contractors</Text>
+              </View>
+            </View>
+          </View>
         </View>
 
-        <Text style={styles.topicsHeader}>Other topics</Text>
-        
-        <TouchableOpacity style={styles.topicBtn}>
-          <Text style={styles.topicIcon}>⚙️</Text>
-          <Text style={styles.topicText}>Account and payment options</Text>
-          <Text style={styles.topicArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.topicDivider} />
-        
-        <TouchableOpacity style={styles.topicBtn}>
-          <Text style={styles.topicIcon}>📱</Text>
-          <Text style={styles.topicText}>App Issues</Text>
-          <Text style={styles.topicArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.topicDivider} />
-        
-        <TouchableOpacity style={styles.topicBtn}>
-          <Text style={styles.topicIcon}>🧹</Text>
-          <Text style={styles.topicText}>Using CrewLynk Jobs</Text>
-          <Text style={styles.topicArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.topicDivider} />
-        
-        <TouchableOpacity style={styles.topicBtn}>
-          <Text style={styles.topicIcon}>🛍️</Text>
-          <Text style={styles.topicText}>Using CrewLynk Services</Text>
-          <Text style={styles.topicArrow}>›</Text>
-        </TouchableOpacity>
-        <View style={styles.topicDivider} />
+        <Text style={{ fontSize: 16, fontWeight: '800', color: Colors.secondary, marginBottom: 12 }}>Client FAQs</Text>
+
+        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 10, elevation: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.secondary, marginBottom: 4 }}>How do I request a cleaning service?</Text>
+          <Text style={{ fontSize: 12, color: '#64748B', lineHeight: 18 }}>
+            Post a service request on your home tab or select a verified contractor directly to receive price offers.
+          </Text>
+        </View>
+
+        <View style={{ backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 10, elevation: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: Colors.secondary, marginBottom: 4 }}>When can I leave a review?</Text>
+          <Text style={{ fontSize: 12, color: '#64748B', lineHeight: 18 }}>
+            You can rate and review your contractor after the project has been handed over and marked completed.
+          </Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -1554,6 +1565,58 @@ const ClientDashboard = ({ user, onLogout }) => {
                 </TouchableOpacity>
               </View>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Client Edit Profile Modal */}
+      <Modal
+        visible={showEditProfile}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowEditProfile(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ width: '100%', backgroundColor: '#FFFFFF', borderRadius: 20, padding: 20, maxHeight: '85%' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.secondary }}>✏️ Edit Profile Details</Text>
+              <TouchableOpacity onPress={() => setShowEditProfile(false)} style={{ padding: 4 }}>
+                <Text style={{ fontSize: 18, color: '#64748B', fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ width: '100%' }}>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>Full Name</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, padding: 12, fontSize: 14, color: '#0F172A', marginBottom: 12 }}
+                value={profileName}
+                onChangeText={setProfileName}
+                placeholder="Enter full name"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569', marginBottom: 4 }}>Phone Number</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, padding: 12, fontSize: 14, color: '#0F172A', marginBottom: 16 }}
+                value={profilePhone}
+                onChangeText={setProfilePhone}
+                keyboardType="phone-pad"
+                placeholder="Enter phone number"
+                placeholderTextColor="#94A3B8"
+              />
+
+              <TouchableOpacity
+                style={[{ backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }, updatingProfile && { opacity: 0.7 }]}
+                disabled={updatingProfile}
+                onPress={handleUpdateClientProfile}
+              >
+                {updatingProfile ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={{ color: '#FFFFFF', fontSize: 14, fontWeight: '800' }}>Save Profile Changes</Text>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
