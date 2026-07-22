@@ -141,7 +141,6 @@ const ContractorDashboard = ({ user, onLogout }) => {
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [subscription, setSubscription] = useState(null);
   const [activeTab, setActiveTab] = useState('projects'); // 'projects', 'newContract', 'gps'
-  const [showEditProfile, setShowEditProfile] = useState(false);
 
   // ── Onboarding Flow States ──
   const [onboardingStep, setOnboardingStep] = useState(1); // 1 = Select Plan, 2 = Select Crew, null = Completed/Dashboard
